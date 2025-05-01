@@ -134,7 +134,8 @@ export async function POST(request: Request) {
             }, { status: 400 });
         }
 
-        const { clientId, musicianId, price, serviceDate, eventType } = result.data;
+        // Desestructuramos sin eventType ya que no lo usamos
+        const { clientId, musicianId, price, serviceDate } = result.data;
 
         // Buscar status "pending"
         const pendingStatus = await prisma.reservationstatus.findFirst({
@@ -172,6 +173,9 @@ export async function POST(request: Request) {
             }
         });
 
+        // Comentamos esta parte para evitar duplicidad de mensajes
+        // El mensaje de confirmación ahora se envía desde el componente Chat.tsx
+        /*
         // Enviar mensaje de confirmación a la conversación
         if (reservation.id) {
             // Buscar la conversación existente
@@ -219,6 +223,7 @@ export async function POST(request: Request) {
                 });
             }
         }
+        */
 
         return NextResponse.json({
             success: true,
