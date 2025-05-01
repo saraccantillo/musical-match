@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Chat } from "@/components/chat";
+import { ReservationData } from "@/components/reservation-form";
 
 interface Reservation {
     id: string;
@@ -47,25 +48,38 @@ interface Conversation {
     musicianId: string;
     clientName: string;
     musicianName: string;
-    lastMessage: string;
+    messages: Message[];
+    updatedAt: string;
+}
+
+interface Message {
+    id: string;
+    content: string;
+    senderId: string;
+    senderType: string;
     timestamp: string;
 }
 
 interface ChatHistoryProps {
-    showOnlyChats?: boolean;
+    showOnlyChats: boolean;
+    showChatsHeader?: boolean;
+    initialMusicianId?: string | null;
+    specificMusicianId?: string;
+    specificClientId?: string | null;
+    useTableLayout?: boolean;
 }
 
-export function ChatHistory({ showOnlyChats }: ChatHistoryProps) {
-    const [reservations, setReservations] = useState<Reservation[]>([]);
+export function ChatHistory({ showOnlyChats, showChatsHeader = true, initialMusicianId = null, specificMusicianId, specificClientId = null, useTableLayout = false }: ChatHistoryProps) {
     const [conversations, setConversations] = useState<Conversation[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [processing, setProcessing] = useState(false);
-    const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
+    const [reservations, setReservations] = useState<Reservation[]>([]);
     const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
-    const [userRole, setUserRole] = useState<string | null>(null);
+    const [userRole, setUserRole] = useState<"CLIENT" | "MUSICIAN" | null>(null);
     const [userId, setUserId] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState("pending");
-    const [loadingError, setLoadingError] = useState<string | null>(null);
+    const [isProcessing, setIsProcessing] = useState<boolean>(false);
+    const [view, setView] = useState<'chats' | 'reservations'>(showOnlyChats ? 'chats' : 'reservations');
+    const [loading, setLoading] = useState(true);
+    const [activeFilter, setActiveFilter] = useState<string>("all");
+    const [processedClientId, setProcessedClientId] = useState<string | null>(null);
 
     useEffect(() => {
         // Obtener el rol del usuario desde localStorage
@@ -73,7 +87,7 @@ export function ChatHistory({ showOnlyChats }: ChatHistoryProps) {
         const storedUser = localStorage.getItem("userData");
 
         if (storedRole) {
-            setUserRole(storedRole);
+            setUserRole(storedRole as "CLIENT" | "MUSICIAN" | null);
         }
 
         if (storedUser) {
@@ -82,268 +96,123 @@ export function ChatHistory({ showOnlyChats }: ChatHistoryProps) {
                 setUserId(userData.id);
             } catch (error) {
                 console.error("Error parsing user data", error);
-                setLoadingError("Error al cargar datos del usuario");
             }
         }
     }, []);
 
-    // Cargar reservas solo si no estamos en modo chats
+    // Detectar cambios en los filtros de pestañas cuando estamos en modo tabla
     useEffect(() => {
-        const fetchReservations = async () => {
-            if (!userId || !userRole || showOnlyChats) return;
+        if (useTableLayout) {
+            const handleTabChange = (event: Event) => {
+                const customEvent = event as CustomEvent;
+                if (customEvent.detail && customEvent.detail.tab) {
+                    setActiveFilter(customEvent.detail.tab);
+                }
+            };
 
-            setLoading(true);
-            setLoadingError(null);
+            document.addEventListener('tabChange', handleTabChange);
+            return () => {
+                document.removeEventListener('tabChange', handleTabChange);
+            };
+        }
+    }, [useTableLayout]);
+
+    // Carga inicial de datos
+    useEffect(() => {
+        async function loadData() {
+            if (!userRole || !userId) return;
 
             try {
-                // Construir el parámetro según el rol
-                const param = userRole === "CLIENT" ? `clientId=${userId}` : `musicianId=${userId}`;
-                const response = await fetch(`/api/reservations?${param}`);
+                setLoading(true);
+                // Cargar conversaciones (chats)
+                await loadConversations();
 
-                if (!response.ok) {
-                    throw new Error('Error obteniendo reservas');
-                }
-
-                const data = await response.json();
-
-                if (data.success && Array.isArray(data.data)) {
-                    setReservations(data.data);
-                } else {
-                    throw new Error('Formato de respuesta inesperado');
+                // Si necesitamos mostrar reservaciones también
+                if (!showOnlyChats) {
+                    await loadReservations();
                 }
             } catch (error) {
-                console.error('Error al cargar reservas:', error);
-                setLoadingError("Error al cargar las reservas. Por favor, intenta nuevamente.");
+                console.error("Error al cargar datos:", error);
             } finally {
                 setLoading(false);
             }
-        };
-
-        fetchReservations();
-    }, [userId, userRole, showOnlyChats]);
-
-    // Cargar conversaciones solo en modo chats
-    useEffect(() => {
-        const fetchConversations = async () => {
-            if (!userId || !userRole) return;
-
-            setLoading(true);
-            setLoadingError(null);
-
-            try {
-                // Obtener todas las conversaciones del usuario
-                const param = userRole === "CLIENT" ? `clientId=${userId}` : `musicianId=${userId}`;
-                const response = await fetch(`/api/messages/conversations?${param}`);
-
-                if (!response.ok) {
-                    throw new Error('Error obteniendo conversaciones');
-                }
-
-                const data = await response.json();
-
-                if (data.success && Array.isArray(data.data)) {
-                    // Las conversaciones ya vienen con toda la información necesaria
-                    setConversations(data.data);
-                } else {
-                    throw new Error('Formato de respuesta inesperado');
-                }
-            } catch (error) {
-                console.error('Error al cargar conversaciones:', error);
-                setLoadingError("Error al cargar los chats. Por favor, intenta nuevamente.");
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchConversations();
-    }, [userId, userRole]);
-
-    const handleReservationSelect = (reservation: Reservation) => {
-        setSelectedReservation(reservation);
-        setSelectedConversation(null);
-    };
-
-    const handleConversationSelect = (conversation: Conversation) => {
-        setSelectedConversation(conversation);
-        setSelectedReservation(null);
-    };
-
-    const handleUpdateStatus = async (reservationId: string, status: string) => {
-        try {
-            setProcessing(true);
-            const response = await fetch('/api/reservations', {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    id: reservationId,
-                    status
-                }),
-            });
-
-            if (!response.ok) {
-                throw new Error('Error al actualizar estado');
-            }
-
-            const data = await response.json();
-
-            if (data.success) {
-                // Actualizar localmente
-                setReservations(prev =>
-                    prev.map(res =>
-                        res.id === reservationId
-                            ? { ...res, reservationStatusId: status, reservationstatus: { ...res.reservationstatus, id: status, name: getStatusName(status) } }
-                            : res
-                    )
-                );
-
-                if (selectedReservation?.id === reservationId) {
-                    setSelectedReservation({
-                        ...selectedReservation,
-                        reservationStatusId: status,
-                        reservationstatus: {
-                            ...selectedReservation.reservationstatus,
-                            id: status,
-                            name: getStatusName(status)
-                        }
-                    });
-                }
-            } else {
-                throw new Error(data.message || 'Error al actualizar el estado');
-            }
-        } catch (error) {
-            console.error('Error al actualizar estado:', error);
-            alert('Hubo un error al actualizar el estado. Por favor, inténtalo de nuevo.');
-        } finally {
-            setProcessing(false);
         }
-    };
 
-    const handlePayment = async (reservationId: string) => {
-        if (!reservationId) return;
+        loadData();
+    }, [userRole, userId, showOnlyChats]);
 
-        setProcessing(true);
+    // Cargar conversación completa para el chat seleccionado
+    const loadFullConversation = useCallback(async (clientId: string, musicianId: string) => {
+        if (!clientId || !musicianId) return null;
 
         try {
-            const response = await fetch('/api/payment', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    reservationId,
-                    successUrl: `${window.location.origin}/payment/success`,
-                    cancelUrl: `${window.location.origin}/payment/cancel`
-                }),
-            });
-
-            if (!response.ok) {
-                throw new Error('Error al iniciar el proceso de pago');
-            }
-
-            const data = await response.json();
-
-            if (data.success && data.url) {
-                // Redirigir al usuario a la página de pago
-                window.location.href = data.url;
-            } else {
-                throw new Error('No se pudo obtener la URL de pago');
-            }
-        } catch (error) {
-            console.error('Error al procesar el pago:', error);
-            alert('Hubo un error al procesar el pago. Por favor, inténtalo de nuevo.');
-        } finally {
-            setProcessing(false);
-        }
-    };
-
-    const getStatusName = (statusId: string): string => {
-        switch (statusId) {
-            case "accepted": return "Aceptada";
-            case "rejected": return "Rechazada";
-            case "pending": return "Pendiente";
-            case "completed": return "Completada";
-            case "canceled": return "Cancelada";
-            case "payment_pending": return "Pago Pendiente";
-            default: return "Desconocido";
-        }
-    };
-
-    const getStatusColor = (status: string): string => {
-        switch (status) {
-            case "accepted":
-                return "bg-green-100 text-green-800";
-            case "rejected":
-                return "bg-red-100 text-red-800";
-            case "pending":
-                return "bg-yellow-100 text-yellow-800";
-            case "completed":
-                return "bg-blue-100 text-blue-800";
-            case "canceled":
-                return "bg-gray-100 text-gray-800";
-            case "payment_pending":
-                return "bg-purple-100 text-purple-800";
-            default:
-                return "bg-gray-100 text-gray-800";
-        }
-    };
-
-    // Filtrar reservas según la pestaña activa (solo aplica en modo reservas)
-    const filteredReservations = reservations.filter(res => {
-        if (activeTab === "all") return true;
-        return res.reservationStatusId === activeTab;
-    });
-
-    // Manejar la aceptación de una prereservación
-    const handleAcceptPrereservation = async (clientId: string, musicianId: string) => {
-        // Solo permitir que los músicos acepten prereservaciones
-        if (userRole !== "MUSICIAN") return;
-
-        if (!clientId || !musicianId) return;
-
-        try {
-            setProcessing(true);
-
-            // Obtener la conversación para extraer los datos de la reserva del primer mensaje
+            setIsProcessing(true);
+            // Obtener la conversación completa con todos los mensajes
             const response = await fetch(`/api/conversations?clientId=${clientId}&musicianId=${musicianId}`);
+
             if (!response.ok) {
-                throw new Error('Error al obtener la conversación');
+                throw new Error('Error al cargar la conversación completa');
             }
 
             const data = await response.json();
+            return data.success ? data.data : null;
+        } catch (error) {
+            console.error("Error al cargar la conversación completa:", error);
+            return null;
+        } finally {
+            setIsProcessing(false);
+        }
+    }, []);
 
-            if (!data.success || !data.data || !data.data.messages || data.data.messages.length === 0) {
-                throw new Error('No se encontraron mensajes en la conversación');
-            }
+    // Manejar la selección de una conversación
+    const handleSelectConversation = useCallback(async (conversation: Conversation) => {
+        try {
+            // Cargar la conversación completa con mensajes
+            const fullConversation = await loadFullConversation(
+                conversation.clientId,
+                conversation.musicianId
+            );
 
-            // Obtener el primer mensaje (mensaje de solicitud de reserva)
-            const firstMessage = data.data.messages[0];
-
-            // Extraer datos del mensaje
-            const messageContent = firstMessage.content;
-
-            // Precio de la reserva
-            const priceMatch = messageContent.match(/Precio inicial: COP \$([0-9,]+)/);
-            const priceString = priceMatch ? priceMatch[1].replace(/,/g, '') : "200000";
-            const price = parseInt(priceString, 10);
-
-            // Fecha del evento
-            const dateMatch = messageContent.match(/Fecha: (\d{2}\/\d{2}\/\d{4})/);
-            let serviceDate = new Date();
-            if (dateMatch) {
-                const dateParts = dateMatch[1].split('/');
-                serviceDate = new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`);
+            if (fullConversation) {
+                // Actualizar la conversación seleccionada con todos los mensajes
+                setSelectedConversation({
+                    ...conversation,
+                    messages: fullConversation.messages || []
+                });
             } else {
-                // Si no se puede extraer, usar fecha a una semana de hoy
-                serviceDate.setDate(serviceDate.getDate() + 7);
+                // Si no se pudo cargar la conversación completa, usar la información básica
+                setSelectedConversation(conversation);
             }
+        } catch (error) {
+            console.error("Error al seleccionar conversación:", error);
+            // En caso de error, intentar mostrar la conversación básica
+            setSelectedConversation(conversation);
+        }
+    }, [loadFullConversation]);
 
-            // Tipo de evento
-            const eventTypeMatch = messageContent.match(/Tipo de evento: ([^\n]+)/);
-            const eventType = eventTypeMatch ? eventTypeMatch[1].trim() : 'Evento';
+    // Manejar la creación de una nueva reservación basada en datos de chat
+    const handleCreateReservation = async (clientId: string, musicianId: string, reservationData: ReservationData) => {
+        console.log("handleCreateReservation llamado con:", { clientId, musicianId, reservationData });
+        // Solo permitir que los músicos creen reservaciones
+        if (userRole !== "MUSICIAN") {
+            console.error("Error: Solo los músicos pueden crear reservaciones");
+            return false;
+        }
+        if (!clientId || !musicianId || !reservationData) {
+            console.error("Error: Faltan datos requeridos para la reservación");
+            return false;
+        }
 
-            console.log("Creando reserva con datos extraídos:", {
+        setIsProcessing(true);
+        console.log("Procesando creación de reserva...");
+
+        try {
+            // Extraer datos de la solicitud de reservación
+            const { eventType, eventDate, initialPrice } = reservationData;
+            const serviceDate = new Date(eventDate);
+            const price = initialPrice;
+
+            console.log("Creando reserva con datos:", {
                 clientId,
                 musicianId,
                 price,
@@ -365,227 +234,334 @@ export function ChatHistory({ showOnlyChats }: ChatHistoryProps) {
                 }),
             });
 
-            if (!createResponse.ok) {
-                const errorData = await createResponse.json();
-                console.error("Error al crear reserva:", errorData);
-                throw new Error(errorData.message || 'Error al crear la reserva');
+            const responseText = await createResponse.text();
+            console.log("Respuesta API texto:", responseText);
+
+            let createData;
+            try {
+                createData = JSON.parse(responseText);
+            } catch (e) {
+                console.error("Error al parsear respuesta JSON:", e);
+                throw new Error("Respuesta del servidor no es un JSON válido");
             }
 
-            const createData = await createResponse.json();
+            if (!createResponse.ok) {
+                console.error("Error en la respuesta del servidor:", createData);
+                throw new Error(createData?.message || 'Error al crear la reserva');
+            }
 
             if (createData.success) {
-                // Recargar las reservaciones
-                window.location.reload();
+                // Recargar las reservaciones si se están mostrando
+                if (!showOnlyChats) {
+                    console.log("Recargando lista de reservas...");
+                    await loadReservations();
+                }
+                console.log("Reserva creada exitosamente:", createData);
+                alert('Reserva creada con éxito');
+                return true;
             } else {
+                console.error("La respuesta indica fallo:", createData);
                 throw new Error(createData.message || 'Error al crear la reserva');
             }
         } catch (error) {
             console.error('Error al crear reserva:', error);
             alert('Hubo un error al crear la reserva. Por favor, inténtalo de nuevo.');
+            return false;
         } finally {
-            setProcessing(false);
+            setIsProcessing(false);
         }
     };
 
-    if (loading) {
-        return <div className="flex justify-center p-8">Cargando...</div>;
-    }
+    // Cargar conversaciones
+    const loadConversations = async () => {
+        try {
+            // Lógica para cargar las conversaciones según el rol del usuario
+            let endpoint = userRole === "CLIENT"
+                ? `/api/conversations?clientId=${userId}`
+                : `/api/conversations?musicianId=${userId}`;
 
-    if (loadingError) {
-        return (
-            <div className="p-8 text-center">
-                <p className="text-red-500 mb-4">{loadingError}</p>
-                <Button onClick={() => window.location.reload()}>Reintentar</Button>
-            </div>
-        );
-    }
+            // Si hay un ID de músico específico y el usuario es un cliente, filtrar por ese músico
+            if (specificMusicianId && userRole === "CLIENT") {
+                endpoint = `/api/conversations?clientId=${userId}&musicianId=${specificMusicianId}`;
+            }
+            // Si hay un musicianId inicial y el usuario es un cliente, filtrar solo esa conversación
+            else if (initialMusicianId && userRole === "CLIENT") {
+                endpoint = `/api/conversations?clientId=${userId}&musicianId=${initialMusicianId}`;
+            }
 
+            const response = await fetch(endpoint);
+
+            if (!response.ok) {
+                throw new Error('Error al cargar conversaciones');
+            }
+
+            const data = await response.json();
+
+            // Si es una conversación específica, formatearla como un array
+            if ((specificMusicianId || initialMusicianId) && userRole === "CLIENT" && data.success && data.data) {
+                // Si la respuesta es una conversación específica (tiene messages), formatearla
+                if (data.data.messages) {
+                    const musicianId = specificMusicianId || initialMusicianId;
+                    setConversations([{
+                        id: crypto.randomUUID(), // Generar un ID temporal
+                        clientId: userId as string,
+                        musicianId: musicianId as string,
+                        clientName: data.data.clientName,
+                        musicianName: data.data.musicianName,
+                        messages: data.data.messages,
+                        updatedAt: new Date().toISOString()
+                    }]);
+                    // También seleccionar automáticamente esta conversación
+                    setSelectedConversation({
+                        id: crypto.randomUUID(),
+                        clientId: userId as string,
+                        musicianId: musicianId as string,
+                        clientName: data.data.clientName,
+                        musicianName: data.data.musicianName,
+                        messages: data.data.messages,
+                        updatedAt: new Date().toISOString()
+                    });
+                } else {
+                    setConversations(data.data || []);
+                }
+            } else {
+                setConversations(data.data || []);
+            }
+        } catch (error) {
+            console.error("Error al cargar conversaciones:", error);
+            throw error;
+        }
+    };
+
+    // Cargar reservaciones
+    const loadReservations = async () => {
+        try {
+            // Lógica para cargar las reservaciones según el rol
+            const endpoint = userRole === "CLIENT"
+                ? `/api/reservations?clientId=${userId}`
+                : `/api/reservations?musicianId=${userId}`;
+
+            const response = await fetch(endpoint);
+
+            if (!response.ok) {
+                throw new Error('Error al cargar reservaciones');
+            }
+
+            const data = await response.json();
+            setReservations(data.data || []);
+        } catch (error) {
+            console.error("Error al cargar reservaciones:", error);
+            throw error;
+        }
+    };
+
+    // Función para mapear ID de estados de la API a los valores locales
+    const mapApiStatusToLocalStatus = (statusId: string): string => {
+        // En la base de datos probablemente los IDs son numéricos o tienen otro formato
+        // Aquí mapeamos esos IDs a nuestros valores locales (pending, completed, rejected, all)
+        const statusMap: Record<string, string> = {
+            "1": "pending",
+            "2": "completed",
+            "3": "rejected",
+            // Agrega más mapeos si es necesario
+        };
+
+        return statusMap[statusId] || statusId;
+    };
+
+    const getStatusColor = (status: string): string => {
+        const statusId = mapApiStatusToLocalStatus(status);
+        switch (statusId) {
+            case "pending":
+            case "1":
+                return "bg-yellow-200 text-yellow-700 border border-yellow-300";
+            case "rejected":
+            case "3":
+                return "bg-red-100 text-red-800";
+            case "completed":
+            case "2":
+                return "bg-blue-100 text-blue-800";
+            default:
+                return "bg-gray-100 text-gray-800";
+        }
+    };
+
+    // Función para filtrar reservaciones según el estado activo
+    const getFilteredReservations = () => {
+        if (activeFilter === "all" || !activeFilter) {
+            return reservations;
+        }
+
+        return reservations.filter(res => {
+            // Mapear el estado de la reserva al valor del filtro
+            const statusMap: Record<string, string> = {
+                "Pendiente": "pending",
+                "Completada": "completed",
+                "Rechazada": "rejected"
+            };
+
+            const reservationStatus = statusMap[res.reservationstatus.name] || "";
+            return reservationStatus === activeFilter;
+        });
+    };
+
+    // Efecto para seleccionar una conversación específica cuando cambia specificClientId
+    useEffect(() => {
+        // Solo intentar seleccionar si hay un ID de cliente específico, hay conversaciones, y no es el mismo que ya se procesó
+        if (specificClientId &&
+            userRole === "MUSICIAN" &&
+            conversations.length > 0 &&
+            specificClientId !== processedClientId) {
+
+            const matchingConversation = conversations.find(
+                conv => conv.clientId === specificClientId
+            );
+
+            if (matchingConversation) {
+                // Marcar este clientId como procesado para evitar ciclos
+                setProcessedClientId(specificClientId);
+                // Seleccionar la conversación
+                handleSelectConversation(matchingConversation);
+            }
+        }
+    }, [specificClientId, conversations, userRole, handleSelectConversation, processedClientId]);
+
+    // Vista de Chats
     return (
-        <div className="h-full">
-            <Tabs defaultValue={showOnlyChats ? "all" : "pending"} className="h-full flex flex-col">
-                {!showOnlyChats && (
-                    <TabsList className="justify-start">
-                        <TabsTrigger value="pending" onClick={() => setActiveTab("pending")}>
-                            Pendientes
-                        </TabsTrigger>
-                        <TabsTrigger value="accepted" onClick={() => setActiveTab("accepted")}>
-                            Aceptadas
-                        </TabsTrigger>
-                        <TabsTrigger value="payment_pending" onClick={() => setActiveTab("payment_pending")}>
-                            Pago Pendiente
-                        </TabsTrigger>
-                        <TabsTrigger value="completed" onClick={() => setActiveTab("completed")}>
-                            Completadas
-                        </TabsTrigger>
-                        <TabsTrigger value="all" onClick={() => setActiveTab("all")}>
-                            Todas
-                        </TabsTrigger>
-                    </TabsList>
-                )}
+        <div className="w-full">
+            {!showOnlyChats && !useTableLayout && (
+                <div className="mb-4">
+                    <Tabs value={view} onValueChange={(value) => setView(value as 'chats' | 'reservations')}>
+                        <TabsList className="grid w-full grid-cols-2">
+                            <TabsTrigger value="chats">Mis Conversaciones</TabsTrigger>
+                            <TabsTrigger value="reservations">Mis Reservaciones</TabsTrigger>
+                        </TabsList>
+                    </Tabs>
+                </div>
+            )}
 
-                {showOnlyChats && (
-                    <div className="pb-4 flex justify-between items-center">
-                        <div>
-                            <h2 className="text-xl font-semibold mb-2">Mis Conversaciones</h2>
-                            <p className="text-sm text-gray-500">Gestiona todos tus chats con clientes</p>
-                        </div>
-                    </div>
-                )}
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Vista de Chats */}
+            {(view === 'chats' && !useTableLayout) && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Lista de conversaciones */}
                     <div className="md:col-span-1">
-                        <div className="space-y-4">
-                            {showOnlyChats ? (
-                                // Mostrar lista de conversaciones
-                                conversations.length > 0 ? (
-                                    conversations.map((conversation) => (
-                                        <Card
-                                            key={conversation.id}
-                                            className={`cursor-pointer ${selectedConversation?.id === conversation.id ? 'border-black' : ''}`}
-                                            onClick={() => handleConversationSelect(conversation)}
-                                        >
-                                            <CardHeader className="pb-2">
-                                                <div className="flex justify-between items-start">
-                                                    <CardTitle className="text-lg">
-                                                        {userRole === "CLIENT" ? conversation.musicianName : conversation.clientName}
-                                                    </CardTitle>
-                                                </div>
-                                                <CardDescription>
-                                                    {conversation.lastMessage.length > 30
-                                                        ? conversation.lastMessage.substring(0, 30) + '...'
-                                                        : conversation.lastMessage}
-                                                    <br />
-                                                    {format(new Date(conversation.timestamp), "dd/MM/yyyy HH:mm")}
-                                                </CardDescription>
-                                            </CardHeader>
-                                        </Card>
-                                    ))
-                                ) : (
-                                    <div className="text-center p-6 bg-gray-50 border rounded-lg">
-                                        <p className="text-gray-500">No tienes conversaciones</p>
-                                    </div>
-                                )
-                            ) : (
-                                // Mostrar lista de reservas (código original)
-                                filteredReservations.length > 0 ? (
-                                    filteredReservations.map((reservation) => (
-                                        <Card
-                                            key={reservation.id}
-                                            className={`cursor-pointer ${selectedReservation?.id === reservation.id ? 'border-black' : ''}`}
-                                            onClick={() => handleReservationSelect(reservation)}
-                                        >
-                                            <CardHeader className="pb-2">
-                                                <div className="flex justify-between items-start">
-                                                    <CardTitle className="text-lg">
-                                                        {userRole === "CLIENT" ? reservation.musician.name : reservation.client.name}
-                                                    </CardTitle>
-                                                    <Badge className={getStatusColor(reservation.reservationStatusId)}>
-                                                        {reservation.reservationstatus.name}
-                                                    </Badge>
-                                                </div>
-                                                <CardDescription>
-                                                    Fecha: {format(new Date(reservation.serviceDate), "dd/MM/yyyy")}
-                                                    <br />
-                                                    Precio: ${reservation.price.toLocaleString()}
-                                                </CardDescription>
-                                            </CardHeader>
-                                        </Card>
-                                    ))
-                                ) : (
-                                    <div className="text-center p-6 bg-gray-50 border rounded-lg">
-                                        <p className="text-gray-500">No hay reservas en esta categoría</p>
-                                    </div>
-                                )
+                        {showChatsHeader && <h2 className="text-xl font-bold mb-4">Mis Conversaciones</h2>}
+                        <div className="space-y-2 max-w-[260px] max-h-[400px] overflow-y-auto">
+                            {loading ? (
+                                <p className="text-center text-gray-500 my-8">Cargando conversaciones...</p>
+                            ) : conversations.length > 0 ? conversations.map((conversation) => (
+                                <Card
+                                    key={conversation.id}
+                                    className={`cursor-pointer hover:border-blue-500 transition-all ${selectedConversation?.id === conversation.id ||
+                                        (specificClientId && conversation.clientId === specificClientId)
+                                        ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-400 shadow-md'
+                                        : ''
+                                        }`}
+                                    onClick={() => handleSelectConversation(conversation)}
+                                >
+                                    <CardHeader className="p-2">
+                                        <CardTitle className="text-sm">
+                                            {userRole === "CLIENT"
+                                                ? conversation.musicianName
+                                                : conversation.clientName}
+                                        </CardTitle>
+                                        <CardDescription className="text-xs">
+                                            {new Date(conversation.updatedAt).toLocaleDateString()}
+                                        </CardDescription>
+                                    </CardHeader>
+                                </Card>
+                            )) : (
+                                <p className="text-center text-gray-500 my-8">
+                                    No tienes conversaciones activas
+                                </p>
                             )}
                         </div>
                     </div>
 
+                    {/* Detalle de la conversación */}
                     <div className="md:col-span-2">
-                        {selectedReservation && !showOnlyChats ? (
-                            // Mostrar detalles de reserva y chat (código original)
-                            <div className="border rounded-lg h-full">
-                                <div className="p-4 border-b">
-                                    <div className="flex justify-between items-center">
-                                        <div>
-                                            <h3 className="text-lg font-semibold">
-                                                {userRole === "CLIENT" ? selectedReservation.musician.name : selectedReservation.client.name}
-                                            </h3>
-                                            <p className="text-sm text-gray-500">
-                                                Reserva para el {format(new Date(selectedReservation.serviceDate), "dd/MM/yyyy")}
-                                            </p>
-                                        </div>
-                                        <Badge className={getStatusColor(selectedReservation.reservationStatusId)}>
-                                            {selectedReservation.reservationstatus.name}
-                                        </Badge>
-                                    </div>
-
-                                    {/* Mostrar botones de acción según el rol y estado */}
-                                    {userRole === "MUSICIAN" && selectedReservation.reservationStatusId === "pending" && (
-                                        <div className="mt-4 flex gap-2">
-                                            <Button
-                                                className="bg-green-600 hover:bg-green-700"
-                                                onClick={() => handleUpdateStatus(selectedReservation.id, "accepted")}
-                                                disabled={processing}
-                                            >
-                                                {processing ? 'Procesando...' : 'Aceptar Reserva'}
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                className="text-red-600 border-red-600 hover:bg-red-50"
-                                                onClick={() => handleUpdateStatus(selectedReservation.id, "rejected")}
-                                                disabled={processing}
-                                            >
-                                                {processing ? 'Procesando...' : 'Rechazar'}
-                                            </Button>
-                                        </div>
-                                    )}
-
-                                    {userRole === "CLIENT" && selectedReservation.reservationStatusId === "accepted" && (
-                                        <div className="mt-4">
-                                            <Button
-                                                className="bg-black hover:bg-gray-800"
-                                                onClick={() => handlePayment(selectedReservation.id)}
-                                                disabled={processing}
-                                            >
-                                                {processing ? 'Procesando...' : 'Proceder al Pago'}
-                                            </Button>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Componente de chat para reserva */}
-                                <Chat
-                                    clientId={selectedReservation.clientId}
-                                    musicianId={selectedReservation.musicianId}
-                                    clientName={selectedReservation.client.name}
-                                    musicianName={selectedReservation.musician.name}
-                                    onAcceptPrereservation={handleAcceptPrereservation}
-                                />
+                        {isProcessing ? (
+                            <div className="h-96 flex items-center justify-center bg-gray-50 rounded-lg border">
+                                <p className="text-gray-500">Cargando conversación...</p>
                             </div>
-                        ) : selectedConversation && showOnlyChats ? (
-                            // Mostrar solo el chat para una conversación seleccionada
-                            <div className="border rounded-lg h-full">
-                                <Chat
-                                    clientId={selectedConversation.clientId}
-                                    musicianId={selectedConversation.musicianId}
-                                    clientName={selectedConversation.clientName}
-                                    musicianName={selectedConversation.musicianName}
-                                    onAcceptPrereservation={handleAcceptPrereservation}
-                                />
-                            </div>
+                        ) : selectedConversation ? (
+                            <Chat
+                                clientId={selectedConversation.clientId}
+                                musicianId={selectedConversation.musicianId}
+                                clientName={selectedConversation.clientName}
+                                musicianName={selectedConversation.musicianName}
+                                onCreateReservationRequest={handleCreateReservation}
+                            />
                         ) : (
-                            <div className="flex items-center justify-center h-full border rounded-lg p-8 bg-gray-50">
-                                <p className="text-gray-500">
-                                    {showOnlyChats
-                                        ? 'Selecciona una conversación para ver el chat'
-                                        : 'Selecciona una reserva para ver la conversación'
-                                    }
-                                </p>
+                            <div className="h-96 flex items-center justify-center bg-gray-50 rounded-lg border">
+                                <p className="text-gray-500">Selecciona una conversación para ver los mensajes</p>
                             </div>
                         )}
                     </div>
                 </div>
-            </Tabs>
+            )}
+
+            {/* Vista de Reservaciones */}
+            {((view === 'reservations' && !showOnlyChats && !useTableLayout) || useTableLayout) && (
+                <>
+                    {loading ? (
+                        useTableLayout ? (
+                            <tr>
+                                <td colSpan={5} className="text-center py-8">Cargando reservaciones...</td>
+                            </tr>
+                        ) : (
+                            <div className="col-span-3 text-center py-8">Cargando reservaciones...</div>
+                        )
+                    ) : reservations.length === 0 ? (
+                        useTableLayout ? (
+                            <tr>
+                                <td colSpan={5} className="text-center py-8">No tienes reservaciones activas</td>
+                            </tr>
+                        ) : (
+                            <div className="col-span-3 text-center py-8">No tienes reservaciones activas</div>
+                        )
+                    ) : (
+                        // Mostrar las reservaciones según el rol del usuario
+                        useTableLayout ? (
+                            // Versión para tabla en la vista de perfil
+                            <>
+                                {getFilteredReservations().map((reservation) => (
+                                    <tr key={reservation.id} className="border-b border-gray-200">
+                                        <td className="px-4 py-2 text-sm">
+                                            {userRole === "MUSICIAN" ? reservation.client.name : reservation.musician.name}
+                                        </td>
+                                        <td className="px-4 py-2 text-sm">
+                                            {format(new Date(reservation.serviceDate), "dd/MM/yyyy")}
+                                        </td>
+                                        <td className="px-4 py-2 text-sm">
+                                            ${Number(reservation.price).toLocaleString()}
+                                        </td>
+                                        <td className="px-4 py-2 text-sm">
+                                            <Badge className={getStatusColor(reservation.reservationstatus.id)}>
+                                                {reservation.reservationstatus.name}
+                                            </Badge>
+                                        </td>
+                                        <td className="px-4 py-2 text-sm">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => window.location.href = `/chats?${userRole === "MUSICIAN" ? "clientId" : "musicianId"}=${userRole === "MUSICIAN" ? reservation.clientId : reservation.musicianId}`}
+                                            >
+                                                Ir al Chat
+                                            </Button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </>
+                        ) : (
+                            <div className="col-span-3">
+                                <h2 className="text-xl font-bold mb-4">Mis Reservaciones</h2>
+                                {/* Aquí iría la tabla o listado de reservaciones */}
+                            </div>
+                        )
+                    )}
+                </>
+            )}
         </div>
     );
 } 

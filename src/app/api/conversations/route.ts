@@ -29,57 +29,136 @@ export async function GET(request: Request) {
         const clientId = searchParams.get("clientId");
         const musicianId = searchParams.get("musicianId");
 
-        if (!clientId || !musicianId) {
-            return NextResponse.json(
-                { success: false, message: "Se requieren clientId y musicianId" },
-                { status: 400 }
-            );
-        }
-
-        // Buscar la conversación existente
-        const conversation = await prisma.conversation.findFirst({
-            where: {
-                AND: [
-                    { clientId },
-                    { musicianId }
-                ]
-            },
-            include: {
-                client: {
-                    select: {
-                        name: true,
-                    }
+        // Si se proporcionan ambos IDs, buscar una conversación específica
+        if (clientId && musicianId) {
+            // Buscar la conversación existente
+            const conversation = await prisma.conversation.findFirst({
+                where: {
+                    AND: [
+                        { clientId },
+                        { musicianId }
+                    ]
                 },
-                musician: {
-                    select: {
-                        name: true,
+                include: {
+                    client: {
+                        select: {
+                            name: true,
+                        }
+                    },
+                    musician: {
+                        select: {
+                            name: true,
+                        }
                     }
                 }
-            }
-        });
+            });
 
-        if (!conversation) {
+            if (!conversation) {
+                return NextResponse.json({
+                    success: true,
+                    data: {
+                        messages: [],
+                        clientName: null,
+                        musicianName: null
+                    }
+                });
+            }
+
+            // Parsear los mensajes almacenados como JSON
+            const messages = conversation.messages as unknown as MessageData[];
+
             return NextResponse.json({
                 success: true,
                 data: {
-                    messages: [],
-                    clientName: null,
-                    musicianName: null
+                    messages,
+                    clientName: conversation.client.name,
+                    musicianName: conversation.musician.name
                 }
             });
         }
+        // Si solo se proporciona clientId, buscar todas las conversaciones del cliente
+        else if (clientId) {
+            const conversations = await prisma.conversation.findMany({
+                where: { clientId },
+                include: {
+                    client: {
+                        select: {
+                            name: true,
+                        }
+                    },
+                    musician: {
+                        select: {
+                            name: true,
+                        }
+                    }
+                },
+                orderBy: {
+                    updatedAt: 'desc'
+                }
+            });
 
-        // Parsear los mensajes almacenados como JSON
-        const messages = conversation.messages as unknown as MessageData[];
+            // Mapear las conversaciones para incluir solo información básica
+            const formattedConversations = conversations.map(conv => {
+                return {
+                    id: conv.id,
+                    clientId: conv.clientId,
+                    musicianId: conv.musicianId,
+                    clientName: conv.client.name,
+                    musicianName: conv.musician.name,
+                    updatedAt: conv.updatedAt
+                };
+            });
 
-        return NextResponse.json({
-            success: true,
-            data: {
-                messages,
-                clientName: conversation.client.name,
-                musicianName: conversation.musician.name
-            }
-        });
+            return NextResponse.json({
+                success: true,
+                data: formattedConversations
+            });
+        }
+        // Si solo se proporciona musicianId, buscar todas las conversaciones del músico
+        else if (musicianId) {
+            const conversations = await prisma.conversation.findMany({
+                where: { musicianId },
+                include: {
+                    client: {
+                        select: {
+                            name: true,
+                        }
+                    },
+                    musician: {
+                        select: {
+                            name: true,
+                        }
+                    }
+                },
+                orderBy: {
+                    updatedAt: 'desc'
+                }
+            });
+
+            // Mapear las conversaciones para incluir solo información básica
+            const formattedConversations = conversations.map(conv => {
+                return {
+                    id: conv.id,
+                    clientId: conv.clientId,
+                    musicianId: conv.musicianId,
+                    clientName: conv.client.name,
+                    musicianName: conv.musician.name,
+                    updatedAt: conv.updatedAt
+                };
+            });
+
+            return NextResponse.json({
+                success: true,
+                data: formattedConversations
+            });
+        }
+        // Si no se proporciona ningún ID, devolver error
+        else {
+            return NextResponse.json(
+                { success: false, message: "Se requiere al menos clientId o musicianId" },
+                { status: 400 }
+            );
+        }
     } catch (error) {
         console.error("Error al obtener conversación:", error);
         return NextResponse.json(

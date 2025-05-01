@@ -2,12 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent } from "@/components/ui/card";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Separator } from "@/components/ui/separator";
+import { ChatHistory } from "@/components/chat-history";
+import { Badge } from "@/components/ui/badge";
 import { ChevronLeft, ChevronRight, MapPin, DollarSign, Calendar, Star, Music, User, Mail, Phone } from "lucide-react";
 import Image from "next/image";
-import { ChatHistory } from "@/components/chat-history";
+import { getUserInitials } from "@/lib/utils";
+import ReservationsTable from "@/components/reservations-table";
 
 // Interfaz para tipos de usuarios
 interface UserData {
@@ -17,6 +22,7 @@ interface UserData {
     email?: string;
     phone?: string;
     imageUrl?: string;
+    city?: string;
 }
 
 export default function ProfilePage() {
@@ -25,6 +31,8 @@ export default function ProfilePage() {
     const [userData, setUserData] = useState<UserData | null>(null);
     const [loading, setLoading] = useState(true);
     const [artistData, setArtistData] = useState<any>(null);
+    const [activeTab, setActiveTab] = useState("description");
+    const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
     const router = useRouter();
 
     const images = [
@@ -57,6 +65,20 @@ export default function ProfilePage() {
         }
 
         setLoading(false);
+
+        // Escuchar el evento para cambiar a la pestaña de chats
+        const handleSwitchToChatsTab = (event: Event) => {
+            const customEvent = event as CustomEvent;
+            if (customEvent.detail && customEvent.detail.userId) {
+                setActiveTab("chats");
+                setSelectedClientId(customEvent.detail.userId);
+            }
+        };
+
+        document.addEventListener('switchToChatsTab', handleSwitchToChatsTab);
+        return () => {
+            document.removeEventListener('switchToChatsTab', handleSwitchToChatsTab);
+        };
     }, []);
 
     const fetchMusicianData = async (musicianId: string) => {
@@ -98,90 +120,124 @@ export default function ProfilePage() {
     // Renderizar perfil de cliente si el rol es CLIENT
     if (userRole === "CLIENT") {
         return (
-            <div className="min-h-screen bg-white text-black">
-                <div className="max-w-6xl mx-auto p-6">
-                    <div className="flex flex-col lg:flex-row gap-8 mt-12">
-                        {/* Imagen de perfil y detalles del cliente */}
-                        <div className="w-full lg:w-1/3">
-                            <div className="bg-white rounded-lg overflow-hidden shadow-md border border-gray-200">
-                                <div className="relative aspect-square bg-gray-100 flex items-center justify-center">
-                                    {userData?.imageUrl ? (
-                                        <Image
-                                            src={userData.imageUrl}
-                                            alt={userData?.name || "Usuario"}
-                                            fill
-                                            className="object-cover"
-                                        />
-                                    ) : (
-                                        <User size={80} className="text-gray-400" />
-                                    )}
+            <div className="container mx-auto py-10 px-4 md:px-6">
+                {!loading ? (
+                    <>
+                        <h1 className="text-3xl font-bold mb-6">Mi Perfil</h1>
+
+                        {userData ? (
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                                {/* Sidebar con información del perfil */}
+                                <div className="col-span-1">
+                                    <Card>
+                                        <CardContent className="pt-6">
+                                            <div className="text-center mb-4">
+                                                <Avatar className="w-20 h-20 mx-auto mb-2">
+                                                    <AvatarFallback className="text-xl">
+                                                        {getUserInitials(userData.name)}
+                                                    </AvatarFallback>
+                                                </Avatar>
+                                                <h2 className="text-xl font-semibold">{userData.name}</h2>
+                                                <p className="text-gray-500 text-sm">{userRole === "MUSICIAN" ? "Músico" : "Cliente"}</p>
+                                            </div>
+
+                                            <Separator className="my-4" />
+
+                                            <div className="mt-4 space-y-2">
+                                                <div>
+                                                    <p className="text-sm font-medium">Email:</p>
+                                                    <p className="text-sm text-gray-500">{userData.email}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-medium">Teléfono:</p>
+                                                    <p className="text-sm text-gray-500">{userData.phone || "No especificado"}</p>
+                                                </div>
+                                                {userData.city && (
+                                                    <div>
+                                                        <p className="text-sm font-medium">Ciudad:</p>
+                                                        <p className="text-sm text-gray-500">{userData.city}</p>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="mt-6">
+                                                <Button
+                                                    variant="outline"
+                                                    className="w-full"
+                                                    onClick={() => router.push('/reservations')}
+                                                >
+                                                    Ver mis reservas
+                                                </Button>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                </div>
+
+                                {/* Contenido principal */}
+                                <div className="col-span-1 md:col-span-3">
+                                    <Tabs defaultValue="reservations" className="w-full">
+                                        <TabsList className="bg-white border border-gray-200">
+                                            <TabsTrigger value="reservations">Mis Reservas</TabsTrigger>
+                                            <TabsTrigger value="favorites">Mis Favoritos</TabsTrigger>
+                                            <TabsTrigger value="reviews">Mis Opiniones</TabsTrigger>
+                                            <TabsTrigger value="chats">Mis Chats</TabsTrigger>
+                                        </TabsList>
+
+                                        <TabsContent value="reservations" className="mt-4">
+                                            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                                                <h2 className="text-xl font-semibold mb-3">Mis Reservas</h2>
+                                                <div className="text-gray-500 italic">
+                                                    No tienes reservas activas. ¡Encuentra un músico para tu próximo evento!
+                                                </div>
+                                            </div>
+                                        </TabsContent>
+
+                                        <TabsContent value="favorites" className="mt-4">
+                                            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                                                <h2 className="text-xl font-semibold mb-3">Mis Músicos Favoritos</h2>
+                                                <div className="text-gray-500 italic">
+                                                    No tienes músicos favoritos. Marca como favorito a los músicos que te interesen.
+                                                </div>
+                                            </div>
+                                        </TabsContent>
+
+                                        <TabsContent value="reviews" className="mt-4">
+                                            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                                                <h2 className="text-xl font-semibold mb-3">Mis Opiniones</h2>
+                                                <div className="text-gray-500 italic">
+                                                    No has dejado opiniones. Comparte tu experiencia después de una reserva.
+                                                </div>
+                                            </div>
+                                        </TabsContent>
+
+                                        <TabsContent value="chats" className="mt-4">
+                                            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                                                <h2 className="text-xl font-semibold mb-3">Mis Conversaciones</h2>
+                                                <p className="text-sm text-gray-500 mb-4">Gestiona todos tus chats con clientes</p>
+                                                <ChatHistory showOnlyChats={true} showChatsHeader={false} />
+                                            </div>
+                                        </TabsContent>
+                                    </Tabs>
                                 </div>
                             </div>
-
-                            <h1 className="text-3xl font-bold mt-4">{userData?.name || "Usuario"}</h1>
-
-                            <div className="mt-6 space-y-4">
-                                <div className="flex items-center text-gray-700">
-                                    <User size={18} className="mr-2" />
-                                    <span>{userData?.username || "username"}</span>
-                                </div>
-                                <div className="flex items-center text-gray-700">
-                                    <Mail size={18} className="mr-2" />
-                                    <span>{userData?.email || "email@example.com"}</span>
-                                </div>
-                                <div className="flex items-center text-gray-700">
-                                    <Phone size={18} className="mr-2" />
-                                    <span>{userData?.phone || "Teléfono no disponible"}</span>
-                                </div>
+                        ) : (
+                            <div className="text-center py-10">
+                                <p>No se encontró información del perfil.</p>
+                                <Button
+                                    variant="outline"
+                                    className="mt-4"
+                                    onClick={() => router.push('/sign-in')}
+                                >
+                                    Iniciar sesión
+                                </Button>
                             </div>
-
-                            <Button
-                                className="w-full mt-6 bg-black hover:bg-gray-800 text-white"
-                                onClick={() => router.push('/dashboard')}
-                            >
-                                Buscar músicos
-                            </Button>
-                        </div>
-
-                        {/* Contenido principal - tabs para cliente */}
-                        <div className="w-full lg:w-2/3">
-                            <Tabs defaultValue="reservations" className="w-full">
-                                <TabsList className="bg-white border border-gray-200">
-                                    <TabsTrigger value="reservations">Mis Reservas</TabsTrigger>
-                                    <TabsTrigger value="favorites">Mis Favoritos</TabsTrigger>
-                                    <TabsTrigger value="reviews">Mis Opiniones</TabsTrigger>
-                                </TabsList>
-
-                                <TabsContent value="reservations" className="mt-4">
-                                    <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                                        <h2 className="text-xl font-semibold mb-3">Mis Reservas</h2>
-                                        <div className="text-gray-500 italic">
-                                            No tienes reservas activas. ¡Encuentra un músico para tu próximo evento!
-                                        </div>
-                                    </div>
-                                </TabsContent>
-
-                                <TabsContent value="favorites" className="mt-4">
-                                    <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                                        <h2 className="text-xl font-semibold mb-3">Mis Músicos Favoritos</h2>
-                                        <div className="text-gray-500 italic">
-                                            No tienes músicos favoritos. Marca como favorito a los músicos que te interesen.
-                                        </div>
-                                    </div>
-                                </TabsContent>
-
-                                <TabsContent value="reviews" className="mt-4">
-                                    <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                                        <h2 className="text-xl font-semibold mb-3">Mis Opiniones</h2>
-                                        <div className="text-gray-500 italic">
-                                            No has dejado opiniones. Comparte tu experiencia después de una reserva.
-                                        </div>
-                                    </div>
-                                </TabsContent>
-                            </Tabs>
-                        </div>
+                        )}
+                    </>
+                ) : (
+                    <div className="text-center py-10">
+                        <p>Cargando información...</p>
                     </div>
-                </div>
+                )}
             </div>
         );
     }
@@ -212,217 +268,257 @@ export default function ProfilePage() {
 
     // Renderizar perfil de músico (caso por defecto)
     return (
-        <div className="min-h-screen bg-white text-black">
-            <div className="max-w-6xl mx-auto p-6">
-                <div className="flex flex-col lg:flex-row gap-8 mt-12">
-                    {/* Imagen de perfil y detalles */}
-                    <div className="w-full lg:w-1/3">
-                        <div className="bg-white rounded-lg overflow-hidden shadow-md border border-gray-200">
-                            <div className="relative aspect-square">
-                                <Image
-                                    src={artistData?.media?.[0]?.filePath || artist.image}
-                                    alt={artist.name}
-                                    fill
-                                    className="object-cover"
-                                />
+        <div className="container mx-auto py-10 px-4 md:px-6">
+            {!loading ? (
+                <>
+                    <h1 className="text-3xl font-bold mb-6">Mi Perfil</h1>
+
+                    {userData ? (
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                            {/* Sidebar con información del perfil */}
+                            <div className="col-span-1">
+                                <Card>
+                                    <CardContent className="pt-6">
+                                        <div className="text-center mb-4">
+                                            <Avatar className="w-20 h-20 mx-auto mb-2">
+                                                <AvatarFallback className="text-xl">
+                                                    {getUserInitials(userData.name)}
+                                                </AvatarFallback>
+                                            </Avatar>
+                                            <h2 className="text-xl font-semibold">{userData.name}</h2>
+                                            <p className="text-gray-500 text-sm">{userRole === "MUSICIAN" ? "Músico" : "Cliente"}</p>
+                                        </div>
+
+                                        <Separator className="my-4" />
+
+                                        <div className="mt-4 space-y-2">
+                                            <div>
+                                                <p className="text-sm font-medium">Email:</p>
+                                                <p className="text-sm text-gray-500">{userData.email}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-medium">Teléfono:</p>
+                                                <p className="text-sm text-gray-500">{userData.phone || "No especificado"}</p>
+                                            </div>
+                                            {userData.city && (
+                                                <div>
+                                                    <p className="text-sm font-medium">Ciudad:</p>
+                                                    <p className="text-sm text-gray-500">{userData.city}</p>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {userRole === "CLIENT" && (
+                                            <div className="mt-6">
+                                                <Button
+                                                    variant="outline"
+                                                    className="w-full"
+                                                    onClick={() => router.push('/reservations')}
+                                                >
+                                                    Ver mis reservas
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </CardContent>
+                                </Card>
                             </div>
-                        </div>
 
-                        <h1 className="text-3xl font-bold mt-4">{artist.name}</h1>
+                            {/* Contenido principal */}
+                            <div className="col-span-1 md:col-span-3">
+                                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                                    <TabsList className="bg-white border border-gray-200">
+                                        <TabsTrigger value="description">Descripción</TabsTrigger>
+                                        <TabsTrigger value="repertoire">Repertorio</TabsTrigger>
+                                        <TabsTrigger value="reviews">Opiniones</TabsTrigger>
+                                        <TabsTrigger value="gallery">Galería</TabsTrigger>
+                                        {userRole === "MUSICIAN" && (
+                                            <>
+                                                <TabsTrigger value="reservations">Mis Reservas</TabsTrigger>
+                                                <TabsTrigger value="chats">Mis Chats</TabsTrigger>
+                                            </>
+                                        )}
+                                    </TabsList>
 
-                        <div className="flex items-center mt-2">
-                            <Star className="h-5 w-5 text-yellow-400" />
-                            <span className="ml-1 font-medium">{artist.rating}</span>
-                            <span className="ml-1 text-gray-500">({artist.totalReviews} reseñas)</span>
-                        </div>
+                                    <TabsContent value="description" className="mt-4">
+                                        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                                            <h2 className="text-xl font-semibold mb-3">Acerca de mí</h2>
+                                            <p className="text-gray-700">{artist.description}</p>
+                                        </div>
 
-                        <div className="flex flex-wrap gap-2 mt-4">
-                            {artistData?.genres?.map((genre: any) => (
-                                <Badge key={genre.id} variant="outline" className="bg-gray-100 hover:bg-gray-200 text-black">
-                                    {genre.name}
-                                </Badge>
-                            )) || artist.genres.map((genre: string) => (
-                                <Badge key={genre} variant="outline" className="bg-gray-100 hover:bg-gray-200 text-black">
-                                    {genre}
-                                </Badge>
-                            ))}
-                        </div>
+                                        {/* Sección de eventos disponibles */}
+                                        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mt-6">
+                                            <h2 className="text-xl font-semibold mb-4">Disponible para eventos</h2>
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                {eventImages.map((event, index) => (
+                                                    <div key={index} className="flex flex-col items-center">
+                                                        <div className="relative w-full h-32 rounded-lg overflow-hidden mb-2">
+                                                            <Image
+                                                                src={event.src}
+                                                                alt={event.title}
+                                                                fill
+                                                                className="object-cover"
+                                                            />
+                                                        </div>
+                                                        <span className="text-sm font-medium">{event.title}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </TabsContent>
 
-                        <div className="flex items-center mt-4 text-gray-700">
-                            <MapPin size={18} className="mr-2" />
-                            <span>{locationText}</span>
-                        </div>
+                                    <TabsContent value="repertoire" className="mt-4">
+                                        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                                            <h2 className="text-xl font-semibold mb-3">Mi repertorio</h2>
+                                            <ul className="space-y-2">
+                                                {artist.repertoire.map((song, index) => (
+                                                    <li key={index} className="flex items-center">
+                                                        <Music size={16} className="mr-2 text-gray-500" />
+                                                        <span className="text-gray-700">{song}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    </TabsContent>
 
-                        <div className="flex items-center mt-2 text-gray-700">
-                            <DollarSign size={18} className="mr-2" />
-                            <span>{priceRangeText}</span>
-                        </div>
+                                    <TabsContent value="reviews" className="mt-4">
+                                        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                                            <h2 className="text-xl font-semibold mb-3">Opiniones de clientes</h2>
+                                            <div className="space-y-4">
+                                                {artist.reviews.map((review, index) => (
+                                                    <div key={index} className="border-b border-gray-200 pb-4 last:border-0">
+                                                        <div className="flex justify-between items-center">
+                                                            <h3 className="font-medium">{review.name}</h3>
+                                                            <span className="text-sm text-gray-500">{review.date}</span>
+                                                        </div>
+                                                        <div className="flex items-center mt-1">
+                                                            {[...Array(5)].map((_, i) => (
+                                                                <Star
+                                                                    key={i}
+                                                                    size={16}
+                                                                    className={i < review.rating ? "text-yellow-400" : "text-gray-300"}
+                                                                    fill={i < review.rating ? "currentColor" : "none"}
+                                                                />
+                                                            ))}
+                                                        </div>
+                                                        <p className="mt-2 text-gray-700">{review.comment}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </TabsContent>
 
-                        <div className="flex items-center mt-2 text-gray-700">
-                            <Calendar size={18} className="mr-2" />
-                            <span>{artist.availability}</span>
-                        </div>
+                                    {userRole === "MUSICIAN" && (
+                                        <>
+                                            <TabsContent value="reservations" className="mt-4">
+                                                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                                                    <h2 className="text-xl font-semibold mb-3">Mis Reservas</h2>
+                                                    <p className="text-sm text-gray-500 mb-4">Gestiona tus reservas con músicos</p>
 
-                        {/* El botón "Reservar artista" solo se muestra si es un cliente viendo el perfil del músico */}
-                        {userRole === "CLIENT" && (
-                            <Button
-                                className="w-full mt-6 bg-black hover:bg-gray-800 text-white"
-                                onClick={() => router.push(`/reservations/new?musician=${artist.id}`)}
-                            >
-                                Reservar artista
-                            </Button>
-                        )}
-                    </div>
+                                                    <div className="mb-4">
+                                                        <Tabs defaultValue="all" onValueChange={(value) => {
+                                                            const event = new CustomEvent('tabChange', { detail: { tab: value } });
+                                                            document.dispatchEvent(event);
+                                                        }}>
+                                                            <TabsList className="mb-4">
+                                                                <TabsTrigger value="all">Todas</TabsTrigger>
+                                                                <TabsTrigger value="pending">Pendientes</TabsTrigger>
+                                                                <TabsTrigger value="completed">Completadas</TabsTrigger>
+                                                                <TabsTrigger value="rejected">Rechazadas</TabsTrigger>
+                                                            </TabsList>
 
-                    {/* Contenido principal - tabs */}
-                    <div className="w-full lg:w-2/3">
-                        <Tabs defaultValue="description" className="w-full">
-                            <TabsList className="bg-white border border-gray-200">
-                                <TabsTrigger value="description">Descripción</TabsTrigger>
-                                <TabsTrigger value="repertoire">Repertorio</TabsTrigger>
-                                <TabsTrigger value="reviews">Opiniones</TabsTrigger>
-                                <TabsTrigger value="gallery">Galería</TabsTrigger>
-                                {userRole === "MUSICIAN" && (
-                                    <>
-                                        <TabsTrigger value="reservations">Mis Reservas</TabsTrigger>
-                                        <TabsTrigger value="chats">Mis Chats</TabsTrigger>
-                                    </>
-                                )}
-                            </TabsList>
+                                                            <div className="overflow-x-auto">
+                                                                <ReservationsTable
+                                                                    onChatSelect={(clientId) => {
+                                                                        setActiveTab("chats");
+                                                                        setSelectedClientId(clientId);
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                        </Tabs>
+                                                    </div>
+                                                </div>
+                                            </TabsContent>
+                                            <TabsContent value="chats" className="mt-4">
+                                                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                                                    <h2 className="text-xl font-semibold mb-3">Mis Conversaciones</h2>
+                                                    <p className="text-sm text-gray-500 mb-4">Gestiona todos tus chats con clientes</p>
+                                                    <ChatHistory
+                                                        showOnlyChats={true}
+                                                        showChatsHeader={false}
+                                                        specificClientId={selectedClientId}
+                                                    />
+                                                </div>
+                                            </TabsContent>
+                                        </>
+                                    )}
 
-                            <TabsContent value="description" className="mt-4">
-                                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                                    <h2 className="text-xl font-semibold mb-3">Acerca de mí</h2>
-                                    <p className="text-gray-700">{artist.description}</p>
-                                </div>
-
-                                {/* Sección de eventos disponibles */}
-                                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mt-6">
-                                    <h2 className="text-xl font-semibold mb-4">Disponible para eventos</h2>
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                        {eventImages.map((event, index) => (
-                                            <div key={index} className="flex flex-col items-center">
-                                                <div className="relative w-full h-32 rounded-lg overflow-hidden mb-2">
+                                    <TabsContent value="gallery" className="mt-4">
+                                        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                                            <h2 className="text-xl font-semibold mb-3">Galería</h2>
+                                            <div className="relative rounded-lg overflow-hidden border border-gray-200">
+                                                <div className="aspect-video relative">
                                                     <Image
-                                                        src={event.src}
-                                                        alt={event.title}
+                                                        src={images[currentImage]}
+                                                        alt="Gallery image"
                                                         fill
                                                         className="object-cover"
                                                     />
                                                 </div>
-                                                <span className="text-sm font-medium">{event.title}</span>
+
+                                                <button
+                                                    onClick={prevImage}
+                                                    className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 p-2 rounded-full hover:bg-black/70 transition"
+                                                >
+                                                    <ChevronLeft size={24} className="text-white" />
+                                                </button>
+
+                                                <button
+                                                    onClick={nextImage}
+                                                    className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 p-2 rounded-full hover:bg-black/70 transition"
+                                                >
+                                                    <ChevronRight size={24} className="text-white" />
+                                                </button>
                                             </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </TabsContent>
 
-                            <TabsContent value="repertoire" className="mt-4">
-                                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                                    <h2 className="text-xl font-semibold mb-3">Mi repertorio</h2>
-                                    <ul className="space-y-2">
-                                        {artist.repertoire.map((song, index) => (
-                                            <li key={index} className="flex items-center">
-                                                <Music size={16} className="mr-2 text-gray-500" />
-                                                <span className="text-gray-700">{song}</span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            </TabsContent>
-
-                            <TabsContent value="reviews" className="mt-4">
-                                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                                    <h2 className="text-xl font-semibold mb-3">Opiniones de clientes</h2>
-                                    <div className="space-y-4">
-                                        {artist.reviews.map((review, index) => (
-                                            <div key={index} className="border-b border-gray-200 pb-4 last:border-0">
-                                                <div className="flex justify-between items-center">
-                                                    <h3 className="font-medium">{review.name}</h3>
-                                                    <span className="text-sm text-gray-500">{review.date}</span>
-                                                </div>
-                                                <div className="flex items-center mt-1">
-                                                    {[...Array(5)].map((_, i) => (
-                                                        <Star
-                                                            key={i}
-                                                            size={16}
-                                                            className={i < review.rating ? "text-yellow-400" : "text-gray-300"}
-                                                            fill={i < review.rating ? "currentColor" : "none"}
+                                            <div className="flex mt-4 gap-2 overflow-x-auto pb-2">
+                                                {images.map((img, idx) => (
+                                                    <div
+                                                        key={idx}
+                                                        className={`relative w-20 h-20 rounded-md overflow-hidden cursor-pointer border-2 ${currentImage === idx ? 'border-black' : 'border-transparent'}`}
+                                                        onClick={() => setCurrentImage(idx)}
+                                                    >
+                                                        <Image
+                                                            src={img}
+                                                            alt={`Thumbnail ${idx + 1}`}
+                                                            fill
+                                                            className="object-cover"
                                                         />
-                                                    ))}
-                                                </div>
-                                                <p className="mt-2 text-gray-700">{review.comment}</p>
+                                                    </div>
+                                                ))}
                                             </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </TabsContent>
-
-                            {userRole === "MUSICIAN" && (
-                                <>
-                                    <TabsContent value="reservations" className="mt-4">
-                                        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-                                            <ChatHistory />
                                         </div>
                                     </TabsContent>
-                                    <TabsContent value="chats" className="mt-4">
-                                        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-                                            <ChatHistory showOnlyChats={true} />
-                                        </div>
-                                    </TabsContent>
-                                </>
-                            )}
-
-                            <TabsContent value="gallery" className="mt-4">
-                                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                                    <h2 className="text-xl font-semibold mb-3">Galería</h2>
-                                    <div className="relative rounded-lg overflow-hidden border border-gray-200">
-                                        <div className="aspect-video relative">
-                                            <Image
-                                                src={images[currentImage]}
-                                                alt="Gallery image"
-                                                fill
-                                                className="object-cover"
-                                            />
-                                        </div>
-
-                                        <button
-                                            onClick={prevImage}
-                                            className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 p-2 rounded-full hover:bg-black/70 transition"
-                                        >
-                                            <ChevronLeft size={24} className="text-white" />
-                                        </button>
-
-                                        <button
-                                            onClick={nextImage}
-                                            className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 p-2 rounded-full hover:bg-black/70 transition"
-                                        >
-                                            <ChevronRight size={24} className="text-white" />
-                                        </button>
-                                    </div>
-
-                                    <div className="flex mt-4 gap-2 overflow-x-auto pb-2">
-                                        {images.map((img, idx) => (
-                                            <div
-                                                key={idx}
-                                                className={`relative w-20 h-20 rounded-md overflow-hidden cursor-pointer border-2 ${currentImage === idx ? 'border-black' : 'border-transparent'}`}
-                                                onClick={() => setCurrentImage(idx)}
-                                            >
-                                                <Image
-                                                    src={img}
-                                                    alt={`Thumbnail ${idx + 1}`}
-                                                    fill
-                                                    className="object-cover"
-                                                />
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </TabsContent>
-                        </Tabs>
-                    </div>
+                                </Tabs>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="text-center py-10">
+                            <p>No se encontró información del perfil.</p>
+                            <Button
+                                variant="outline"
+                                className="mt-4"
+                                onClick={() => router.push('/sign-in')}
+                            >
+                                Iniciar sesión
+                            </Button>
+                        </div>
+                    )}
+                </>
+            ) : (
+                <div className="text-center py-10">
+                    <p>Cargando información...</p>
                 </div>
-            </div>
+            )}
         </div>
     );
 } 

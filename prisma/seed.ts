@@ -214,10 +214,8 @@ async function createReservationStatus() {
 
     const statuses = [
         { name: 'Pendiente' },
-        { name: 'Confirmada' },
-        { name: 'Cancelada' },
         { name: 'Completada' },
-        { name: 'En Progreso' }
+        { name: 'Rechazada' }
     ];
 
     for (const status of statuses) {

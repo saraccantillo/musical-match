@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, MapPin, DollarSign, Calendar, Star, Music, Heart } from "lucide-react";
 import Image from "next/image";
 import { ReservationForm, type ReservationData } from "@/components/reservation-form";
-import { Chat } from "@/components/chat";
+import { ChatHistory } from "@/components/chat-history";
+import { format } from "date-fns";
 
 // Tipos para el músico
 interface Musician {
@@ -52,7 +53,6 @@ export default function MusicianProfilePage() {
     const [userData, setUserData] = useState<UserData | null>(null);
     const [loading, setLoading] = useState(true);
     const [isReservationDialogOpen, setIsReservationDialogOpen] = useState(false);
-    const [reservation, setReservation] = useState<ReservationData | null>(null);
     const [isFavorite, setIsFavorite] = useState(false);
     const [musician, setMusician] = useState<Musician | null>(null);
 
@@ -136,11 +136,62 @@ export default function MusicianProfilePage() {
         { src: "/images/party.jpg", title: "Fiestas Privadas" },
     ];
 
-    const handleReservationSubmit = (data: ReservationData) => {
+    const handleReservationSubmit = async (data: ReservationData) => {
         console.log("Reserva enviada:", data);
-        setReservation(data);
-        // En un escenario real, aquí enviaríamos los datos a la API
-        // saveReservation(data)
+
+        // Crear la conversación inicial con el mensaje de prereservación
+        if (userData && userRole === "CLIENT" && musician) {  // Asegurarse de que musician no sea null
+            try {
+                // Construir el mensaje de reserva
+                const reservationMessage = `
+📅 *SOLICITUD DE RESERVA*
+            
+Tipo de evento: ${data.eventType}
+Fecha: ${format(new Date(data.eventDate), "dd/MM/yyyy")}
+Ubicación: ${data.location.city}, ${data.location.department}
+Dirección: ${data.address}
+            
+Precio inicial: COP $${data.initialPrice.toLocaleString()}
+            
+Comentarios adicionales: ${data.comments || "Ninguno"}
+                `;
+
+                // Enviar el mensaje a la API para crear la conversación
+                const response = await fetch('/api/conversations', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        clientId: userData.id,
+                        musicianId: musician.id,
+                        content: reservationMessage,
+                        senderId: userData.id,
+                        senderType: "CLIENT"
+                    }),
+                });
+
+                if (!response.ok) {
+                    throw new Error('Error al crear la conversación');
+                }
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert("Tu solicitud ha sido enviada al músico. Puedes ver tu conversación en la pestaña Chat.");
+                    // Cambiar a la pestaña de chat
+                    const chatTab = document.querySelector('[value="chat"]') as HTMLElement;
+                    if (chatTab) {
+                        chatTab.click();
+                    }
+                } else {
+                    throw new Error(result.message || 'Error al crear la conversación');
+                }
+            } catch (error) {
+                console.error('Error al crear la conversación:', error);
+                alert('Hubo un error al enviar tu solicitud. Por favor, inténtalo de nuevo.');
+            }
+        }
     };
 
     const toggleFavorite = () => {
@@ -260,7 +311,7 @@ export default function MusicianProfilePage() {
                                 <TabsTrigger value="repertoire">Repertorio</TabsTrigger>
                                 <TabsTrigger value="reviews">Opiniones</TabsTrigger>
                                 <TabsTrigger value="gallery">Galería</TabsTrigger>
-                                {reservation && <TabsTrigger value="chat">Chat</TabsTrigger>}
+                                {userRole === "CLIENT" && <TabsTrigger value="chat">Chat</TabsTrigger>}
                             </TabsList>
 
                             <TabsContent value="description" className="mt-6">
@@ -379,17 +430,32 @@ export default function MusicianProfilePage() {
                                 </div>
                             </TabsContent>
 
-                            {reservation && (
+                            {userRole === "CLIENT" && (
                                 <TabsContent value="chat" className="mt-4">
-                                    {userData && (
-                                        <Chat
-                                            clientId={userData.id || "client-1"}
-                                            musicianId={musician.id}
-                                            clientName={userData.name || "Cliente"}
-                                            musicianName={musician.name}
-                                            reservationData={reservation}
-                                        />
-                                    )}
+                                    <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                                        <h2 className="text-xl font-semibold mb-3">Mis Conversaciones</h2>
+                                        <p className="text-sm text-gray-500 mb-4">Gestiona todos tus chats con {musician.name}</p>
+
+                                        {userData && (
+                                            <ChatHistory
+                                                showOnlyChats={true}
+                                                showChatsHeader={false}
+                                                specificMusicianId={musician.id}
+                                            />
+                                        )}
+
+                                        {!userData && (
+                                            <div className="text-center">
+                                                <p className="text-gray-500 mb-6">Debes iniciar sesión para ver tus conversaciones.</p>
+                                                <Button
+                                                    className="bg-black hover:bg-gray-800 text-white"
+                                                    onClick={() => router.push('/sign-in')}
+                                                >
+                                                    Iniciar sesión
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </div>
                                 </TabsContent>
                             )}
                         </Tabs>
