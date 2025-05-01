@@ -7,6 +7,23 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model department {
+  id     String   @id @default(cuid())
+  name   String   @db.VarChar(50)
+  cities city[]
+}
+
+model city {
+  id           String     @id @default(cuid())
+  name         String     @db.VarChar(50)
+  departmentId String
+  department   department @relation(fields: [departmentId], references: [id], map: "City_departmentId_fkey")
+  client       client[]
+  musician     musician[]
+
+  @@index([departmentId], map: "City_departmentId_fkey")
+}
+
 model client {
   id                   String                 @id @default(cuid())
   username             String                 @unique(map: "Client_username_key") @db.VarChar(30)
@@ -14,10 +31,15 @@ model client {
   name                 String                 @db.VarChar(50)
   email                String                 @unique(map: "Client_email_key") @db.VarChar(50)
   phone                String                 @db.VarChar(20)
+  cityId               String?
+  address              String?                @db.VarChar(255)
+  city                 city?                  @relation(fields: [cityId], references: [id], map: "Client_cityId_fkey")
   completedreservation completedreservation[]
-  message              message[]
+  conversation         conversation[]
   reservation          reservation[]
   review               review[]
+
+  @@index([cityId], map: "Client_cityId_fkey")
 }
 
 model completedreservation {
@@ -52,20 +74,19 @@ model media {
   @@index([musicianId], map: "Media_musicianId_fkey")
 }
 
-model message {
-  id            String      @id @default(cuid())
-  clientId      String
-  musicianId    String
-  content       String      @db.Text
-  timestamp     DateTime    @default(now())
-  reservationId String
-  client        client      @relation(fields: [clientId], references: [id], map: "Message_clientId_fkey")
-  musician      musician    @relation(fields: [musicianId], references: [id], map: "Message_musicianId_fkey")
-  reservation   reservation @relation(fields: [reservationId], references: [id], map: "Message_reservationId_fkey")
+model conversation {
+  id         String   @id @default(cuid())
+  clientId   String
+  musicianId String
+  messages   Json    // Almacenará un array de mensajes
+  updatedAt  DateTime @default(now()) @updatedAt
+  createdAt  DateTime @default(now())
+  client     client   @relation(fields: [clientId], references: [id], map: "Conversation_clientId_fkey")
+  musician   musician @relation(fields: [musicianId], references: [id], map: "Conversation_musicianId_fkey")
 
-  @@index([clientId], map: "Message_clientId_fkey")
-  @@index([musicianId], map: "Message_musicianId_fkey")
-  @@index([reservationId], map: "Message_reservationId_fkey")
+  @@unique([clientId, musicianId], map: "Conversation_clientId_musicianId_key")
+  @@index([clientId], map: "Conversation_clientId_fkey")
+  @@index([musicianId], map: "Conversation_musicianId_fkey")
 }
 
 model musicalgenre {
@@ -81,13 +102,21 @@ model musician {
   name                 String                 @db.VarChar(50)
   email                String                 @unique(map: "Musician_email_key") @db.VarChar(50)
   phone                String                 @db.VarChar(20)
+  minPrice             Decimal?               @db.Decimal(10, 2)
+  maxPrice             Decimal?               @db.Decimal(10, 2)
+  cityId               String?
+  address              String?                @db.VarChar(255)
+  city                 city?                  @relation(fields: [cityId], references: [id], map: "Musician_cityId_fkey")
   completedreservation completedreservation[]
   media                media[]
-  message              message[]
+  conversation         conversation[]
   musiciangenre        musiciangenre[]
   musicianinstrument   musicianinstrument[]
+  musicianevent        musicianevent[]
   reservation          reservation[]
   review               review[]
+
+  @@index([cityId], map: "Musician_cityId_fkey")
 }
 
 model musiciangenre {
@@ -131,7 +160,6 @@ model reservation {
   creationDate        DateTime          @default(now())
   serviceDate         DateTime
   reservationStatusId String
-  message             message[]
   client              client            @relation(fields: [clientId], references: [id], map: "Reservation_clientId_fkey")
   musician            musician          @relation(fields: [musicianId], references: [id], map: "Reservation_musicianId_fkey")
   reservationstatus   reservationstatus @relation(fields: [reservationStatusId], references: [id], map: "Reservation_reservationStatusId_fkey")
@@ -159,4 +187,21 @@ model review {
 
   @@index([clientId], map: "Review_clientId_fkey")
   @@index([musicianId], map: "Review_musicianId_fkey")
+}
+
+model event {
+  id            String          @id @default(cuid())
+  name          String          @db.VarChar(50)
+  musicianevent musicianevent[]
+}
+
+model musicianevent {
+  id         String   @id @default(cuid())
+  musicianId String
+  eventId    String
+  musician   musician @relation(fields: [musicianId], references: [id], map: "MusicianEvent_musicianId_fkey")
+  event      event    @relation(fields: [eventId], references: [id], map: "MusicianEvent_eventId_fkey")
+
+  @@unique([musicianId, eventId], map: "MusicianEvent_musicianId_eventId_key")
+  @@index([eventId], map: "MusicianEvent_eventId_fkey")
 }

@@ -29,6 +29,7 @@ interface Musician {
         rating: number;
         comment: string;
     }[];
+    events?: string[];
 }
 
 // Tipos para el usuario
@@ -53,6 +54,7 @@ export default function MusicianProfilePage() {
     const [isReservationDialogOpen, setIsReservationDialogOpen] = useState(false);
     const [reservation, setReservation] = useState<ReservationData | null>(null);
     const [isFavorite, setIsFavorite] = useState(false);
+    const [musician, setMusician] = useState<Musician | null>(null);
 
     const images = [
         "/images/gallery-1.jpg",
@@ -77,10 +79,45 @@ export default function MusicianProfilePage() {
             }
         }
 
-        // En un escenario real, aquí obtendríamos los datos del músico con el ID
-        // desde la API con algo como: fetchMusicianData(musicianId)
+        // Obtener datos del músico desde la API específica por ID
+        const fetchMusicianData = async () => {
+            try {
+                const response = await fetch(`/api/musicians/${musicianId}`);
+                if (!response.ok) {
+                    throw new Error('Error al cargar los datos del músico');
+                }
 
-        setLoading(false);
+                const musicianData = await response.json();
+
+                if (musicianData) {
+                    setMusician({
+                        id: musicianData.id,
+                        name: musicianData.name,
+                        description: musicianData.description || "Músico profesional con experiencia en eventos.",
+                        genres: musicianData.genre || [],
+                        location: musicianData.location || "Colombia",
+                        priceRange: musicianData.price || "$200k - $500k",
+                        image: musicianData.image || "/images/profile.jpg",
+                        rating: musicianData.rating || 4.5,
+                        totalReviews: musicianData.totalReviews || 0,
+                        availability: "Disponible los fines de semana",
+                        repertoire: musicianData.repertoire || [
+                            "Música variada según el evento"
+                        ],
+                        reviews: musicianData.reviews || [],
+                        events: musicianData.events || []
+                    });
+                } else {
+                    console.error("Músico no encontrado");
+                }
+            } catch (error) {
+                console.error("Error fetching musician data:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchMusicianData();
     }, [musicianId]);
 
     const nextImage = () => {
@@ -98,41 +135,6 @@ export default function MusicianProfilePage() {
         { src: "/images/graduation.jpg", title: "Graduaciones" },
         { src: "/images/party.jpg", title: "Fiestas Privadas" },
     ];
-
-    // En un escenario real, estos datos vendrían de una API o base de datos
-    const musician: Musician = {
-        id: musicianId,
-        name: "Carlos Vives",
-        description: "Músico profesional con más de 10 años de experiencia en eventos sociales y corporativos. Especializado en música latinoamericana, pop y boleros.",
-        genres: ["Matrimonio", "Boleros", "Fusión", "Pop"],
-        location: "Pereira, Risaralda",
-        priceRange: "$300.000 - $500.000",
-        image: "/images/profile.jpg",
-        rating: 4.8,
-        totalReviews: 56,
-        availability: "Disponible los fines de semana",
-        repertoire: [
-            "Color Esperanza - Diego Torres",
-            "Vivir Mi Vida - Marc Anthony",
-            "La Bicicleta - Carlos Vives",
-            "Despacito - Luis Fonsi",
-            "A Dios Le Pido - Juanes"
-        ],
-        reviews: [
-            {
-                name: "Laura Gómez",
-                date: "15 de Marzo, 2025",
-                rating: 5,
-                comment: "Excelente presentación en mi matrimonio. Todos los invitados quedaron encantados."
-            },
-            {
-                name: "Juan Pérez",
-                date: "2 de Febrero, 2025",
-                rating: 4,
-                comment: "Muy buen artista, cumplió con todas nuestras expectativas."
-            }
-        ]
-    };
 
     const handleReservationSubmit = (data: ReservationData) => {
         console.log("Reserva enviada:", data);
@@ -159,6 +161,19 @@ export default function MusicianProfilePage() {
                 <p className="text-gray-600 mb-6">Debes iniciar sesión para ver el perfil de este músico.</p>
                 <Button onClick={() => router.push('/sign-in')}>
                     Iniciar Sesión
+                </Button>
+            </div>
+        );
+    }
+
+    // Si no se encontró el músico
+    if (!musician) {
+        return (
+            <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6">
+                <h1 className="text-2xl font-bold mb-4">Músico no encontrado</h1>
+                <p className="text-gray-600 mb-6">No pudimos encontrar la información del músico solicitado.</p>
+                <Button onClick={() => router.push('/dashboard')}>
+                    Volver al Dashboard
                 </Button>
             </div>
         );
@@ -226,6 +241,7 @@ export default function MusicianProfilePage() {
                             <span>{musician.availability}</span>
                         </div>
 
+                        {/* Botón de reserva - solo visible para los clientes */}
                         {userRole === "CLIENT" && userData?.id !== musicianId && (
                             <Button
                                 className="w-full mt-6 bg-black hover:bg-gray-800 text-white"
@@ -247,29 +263,30 @@ export default function MusicianProfilePage() {
                                 {reservation && <TabsTrigger value="chat">Chat</TabsTrigger>}
                             </TabsList>
 
-                            <TabsContent value="description" className="mt-4">
-                                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                                    <h2 className="text-xl font-semibold mb-3">Acerca de mí</h2>
+                            <TabsContent value="description" className="mt-6">
+                                <div className="bg-white rounded-lg border border-gray-200 p-6">
+                                    <h2 className="text-xl font-bold mb-4">Acerca de mí</h2>
                                     <p className="text-gray-700">{musician.description}</p>
-                                </div>
 
-                                {/* Sección de eventos disponibles */}
-                                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mt-6">
-                                    <h2 className="text-xl font-semibold mb-4">Disponible para eventos</h2>
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                        {eventImages.map((event, index) => (
-                                            <div key={index} className="flex flex-col items-center">
-                                                <div className="relative w-full h-32 rounded-lg overflow-hidden mb-2">
-                                                    <Image
-                                                        src={event.src}
-                                                        alt={event.title}
-                                                        fill
-                                                        className="object-cover"
-                                                    />
+                                    <h2 className="text-xl font-bold mt-8 mb-4">Disponible para eventos</h2>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                        {(musician.events || []).map((eventName, index) => {
+                                            const eventImg = eventImages.find(e => e.title === eventName);
+                                            return (
+                                                <div key={index} className="text-center">
+                                                    <div className="rounded-lg overflow-hidden mb-2">
+                                                        <Image
+                                                            src={eventImg?.src || "/images/party.jpg"}
+                                                            alt={eventName}
+                                                            width={150}
+                                                            height={100}
+                                                            className="object-cover w-full h-[100px]"
+                                                        />
+                                                    </div>
+                                                    <span className="text-sm font-medium">{eventName}</span>
                                                 </div>
-                                                <span className="text-sm font-medium">{event.title}</span>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             </TabsContent>
@@ -380,16 +397,15 @@ export default function MusicianProfilePage() {
                 </div>
             </div>
 
-            {/* Formulario de reserva (diálogo) */}
-            {userRole === "CLIENT" && (
+            {/* Formulario de reserva */}
+            {isReservationDialogOpen && userRole === "CLIENT" && (
                 <ReservationForm
-                    isOpen={isReservationDialogOpen}
+                    isOpen={true}
                     onClose={() => setIsReservationDialogOpen(false)}
                     onSubmit={handleReservationSubmit}
-                    initialPrice={300000}
-                    clientId={userData?.id || ""}
-                    musicianId={musician.id}
-                    comments=""
+                    initialPrice={musician.priceRange.replace(/[^0-9]/g, "").length > 0
+                        ? parseInt(musician.priceRange.replace(/[^0-9]/g, ""))
+                        : 300000}
                 />
             )}
         </div>

@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, MapPin, DollarSign, Calendar, Star, Music, User, Mail, Phone } from "lucide-react";
 import Image from "next/image";
+import { ChatHistory } from "@/components/chat-history";
 
 // Interfaz para tipos de usuarios
 interface UserData {
@@ -23,6 +24,7 @@ export default function ProfilePage() {
     const [userRole, setUserRole] = useState<string | null>(null);
     const [userData, setUserData] = useState<UserData | null>(null);
     const [loading, setLoading] = useState(true);
+    const [artistData, setArtistData] = useState<any>(null);
     const router = useRouter();
 
     const images = [
@@ -42,7 +44,13 @@ export default function ProfilePage() {
 
         if (storedUser) {
             try {
-                setUserData(JSON.parse(storedUser));
+                const parsedUserData = JSON.parse(storedUser);
+                setUserData(parsedUserData);
+
+                // Si es músico, obtener datos adicionales desde la API
+                if (storedRole === "MUSICIAN" && parsedUserData.id) {
+                    fetchMusicianData(parsedUserData.id);
+                }
             } catch (error) {
                 console.error("Error parsing user data", error);
             }
@@ -50,6 +58,22 @@ export default function ProfilePage() {
 
         setLoading(false);
     }, []);
+
+    const fetchMusicianData = async (musicianId: string) => {
+        try {
+            const response = await fetch(`/api/musicians/${musicianId}`);
+            if (!response.ok) {
+                throw new Error('Error obteniendo datos del músico');
+            }
+            const data = await response.json();
+
+            if (data.success) {
+                setArtistData(data.data);
+            }
+        } catch (error) {
+            console.error('Error al obtener datos del músico:', error);
+        }
+    };
 
     const nextImage = () => {
         setCurrentImage((prev) => (prev === images.length - 1 ? 0 : prev + 1));
@@ -66,40 +90,6 @@ export default function ProfilePage() {
         { src: "/images/graduation.jpg", title: "Graduaciones" },
         { src: "/images/party.jpg", title: "Fiestas Privadas" },
     ];
-
-    // En un caso real, estos datos vendrían de una API o base de datos
-    const artist = {
-        name: "Carlos Vives",
-        description: "Músico profesional con más de 10 años de experiencia en eventos sociales y corporativos. Especializado en música latinoamericana, pop y boleros.",
-        genres: ["Matrimonio", "Boleros", "Fusión", "Pop"],
-        location: "Pereira, Risaralda",
-        priceRange: "$300.000 - $500.000",
-        image: "/images/profile.jpg",
-        rating: 4.8,
-        totalReviews: 56,
-        availability: "Disponible los fines de semana",
-        repertoire: [
-            "Color Esperanza - Diego Torres",
-            "Vivir Mi Vida - Marc Anthony",
-            "La Bicicleta - Carlos Vives",
-            "Despacito - Luis Fonsi",
-            "A Dios Le Pido - Juanes"
-        ],
-        reviews: [
-            {
-                name: "Laura Gómez",
-                date: "15 de Marzo, 2025",
-                rating: 5,
-                comment: "Excelente presentación en mi matrimonio. Todos los invitados quedaron encantados."
-            },
-            {
-                name: "Juan Pérez",
-                date: "2 de Febrero, 2025",
-                rating: 4,
-                comment: "Muy buen artista, cumplió con todas nuestras expectativas."
-            }
-        ]
-    };
 
     if (loading) {
         return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
@@ -196,6 +186,30 @@ export default function ProfilePage() {
         );
     }
 
+    // Preparar la información del artista basada en datos reales o datos por defecto
+    const artist = artistData || {
+        name: userData?.name || "Músico",
+        description: "Información no disponible",
+        genres: [],
+        location: "Ubicación no disponible",
+        priceRange: "Precio no disponible",
+        image: "/images/profile.jpg",
+        rating: 0,
+        totalReviews: 0,
+        availability: "Disponibilidad no disponible",
+        repertoire: [],
+        reviews: []
+    };
+
+    // Mostrar datos del músico
+    const locationText = artistData?.city
+        ? `${artistData.city.name}, ${artistData.city.department.name}`
+        : artist.location;
+
+    const priceRangeText = artistData?.minPrice && artistData?.maxPrice
+        ? `$${Number(artistData.minPrice).toLocaleString()} - $${Number(artistData.maxPrice).toLocaleString()}`
+        : artist.priceRange;
+
     // Renderizar perfil de músico (caso por defecto)
     return (
         <div className="min-h-screen bg-white text-black">
@@ -206,7 +220,7 @@ export default function ProfilePage() {
                         <div className="bg-white rounded-lg overflow-hidden shadow-md border border-gray-200">
                             <div className="relative aspect-square">
                                 <Image
-                                    src={artist.image}
+                                    src={artistData?.media?.[0]?.filePath || artist.image}
                                     alt={artist.name}
                                     fill
                                     className="object-cover"
@@ -223,7 +237,11 @@ export default function ProfilePage() {
                         </div>
 
                         <div className="flex flex-wrap gap-2 mt-4">
-                            {artist.genres.map((genre) => (
+                            {artistData?.genres?.map((genre: any) => (
+                                <Badge key={genre.id} variant="outline" className="bg-gray-100 hover:bg-gray-200 text-black">
+                                    {genre.name}
+                                </Badge>
+                            )) || artist.genres.map((genre: string) => (
                                 <Badge key={genre} variant="outline" className="bg-gray-100 hover:bg-gray-200 text-black">
                                     {genre}
                                 </Badge>
@@ -232,12 +250,12 @@ export default function ProfilePage() {
 
                         <div className="flex items-center mt-4 text-gray-700">
                             <MapPin size={18} className="mr-2" />
-                            <span>{artist.location}</span>
+                            <span>{locationText}</span>
                         </div>
 
                         <div className="flex items-center mt-2 text-gray-700">
                             <DollarSign size={18} className="mr-2" />
-                            <span>{artist.priceRange}</span>
+                            <span>{priceRangeText}</span>
                         </div>
 
                         <div className="flex items-center mt-2 text-gray-700">
@@ -245,9 +263,15 @@ export default function ProfilePage() {
                             <span>{artist.availability}</span>
                         </div>
 
-                        <Button className="w-full mt-6 bg-black hover:bg-gray-800 text-white">
-                            Reservar artista
-                        </Button>
+                        {/* El botón "Reservar artista" solo se muestra si es un cliente viendo el perfil del músico */}
+                        {userRole === "CLIENT" && (
+                            <Button
+                                className="w-full mt-6 bg-black hover:bg-gray-800 text-white"
+                                onClick={() => router.push(`/reservations/new?musician=${artist.id}`)}
+                            >
+                                Reservar artista
+                            </Button>
+                        )}
                     </div>
 
                     {/* Contenido principal - tabs */}
@@ -258,6 +282,12 @@ export default function ProfilePage() {
                                 <TabsTrigger value="repertoire">Repertorio</TabsTrigger>
                                 <TabsTrigger value="reviews">Opiniones</TabsTrigger>
                                 <TabsTrigger value="gallery">Galería</TabsTrigger>
+                                {userRole === "MUSICIAN" && (
+                                    <>
+                                        <TabsTrigger value="reservations">Mis Reservas</TabsTrigger>
+                                        <TabsTrigger value="chats">Mis Chats</TabsTrigger>
+                                    </>
+                                )}
                             </TabsList>
 
                             <TabsContent value="description" className="mt-4">
@@ -327,6 +357,21 @@ export default function ProfilePage() {
                                     </div>
                                 </div>
                             </TabsContent>
+
+                            {userRole === "MUSICIAN" && (
+                                <>
+                                    <TabsContent value="reservations" className="mt-4">
+                                        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                                            <ChatHistory />
+                                        </div>
+                                    </TabsContent>
+                                    <TabsContent value="chats" className="mt-4">
+                                        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                                            <ChatHistory showOnlyChats={true} />
+                                        </div>
+                                    </TabsContent>
+                                </>
+                            )}
 
                             <TabsContent value="gallery" className="mt-4">
                                 <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">

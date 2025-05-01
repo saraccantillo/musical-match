@@ -10,11 +10,17 @@ async function main() {
     await cleanData();
 
     // Crear datos de prueba
+    await createDepartments();
+    await createCities();
     await createMusicalGenres();
     await createInstruments();
     await createPaymentMethods();
     await createReservationStatus();
+    await createEvents();
     await createUsers();
+    await updateMusiciansWithEvents();
+    await createSampleReviews();
+    await createSampleReservations();
 
     console.log('Seed completado con éxito!');
 }
@@ -30,13 +36,85 @@ async function cleanData() {
     await prisma.media.deleteMany({});
     await prisma.musiciangenre.deleteMany({});
     await prisma.musicianinstrument.deleteMany({});
+    await prisma.musicianevent.deleteMany({});
     await prisma.client.deleteMany({});
     await prisma.musician.deleteMany({});
+    await prisma.city.deleteMany({});
+    await prisma.department.deleteMany({});
     await prisma.musicalgenre.deleteMany({});
     await prisma.instrument.deleteMany({});
+    await prisma.event.deleteMany({});
     await prisma.paymentmethod.deleteMany({});
     await prisma.reservationstatus.deleteMany({});
     await prisma.requeststatus.deleteMany({});
+}
+
+async function createDepartments() {
+    console.log('Creando departamentos...');
+
+    const departments = [
+        { name: 'Risaralda' },
+        { name: 'Antioquia' },
+        { name: 'Valle del Cauca' },
+        { name: 'Cundinamarca' },
+        { name: 'Caldas' },
+        { name: 'Quindío' },
+        { name: 'Atlántico' },
+        { name: 'Bolívar' },
+        { name: 'Santander' },
+        { name: 'Norte de Santander' }
+    ];
+
+    for (const department of departments) {
+        await prisma.department.create({
+            data: department
+        });
+    }
+
+    console.log(`✅ Creados ${departments.length} departamentos`);
+}
+
+async function createCities() {
+    console.log('Creando ciudades...');
+
+    // Obtener departamentos
+    const departments = await prisma.department.findMany();
+
+    // Mapeo de departamento a nombre para facilitar la búsqueda
+    const departmentMap = new Map(departments.map(dep => [dep.name, dep.id]));
+
+    const cities = [
+        { name: 'Pereira', departmentName: 'Risaralda' },
+        { name: 'Dosquebradas', departmentName: 'Risaralda' },
+        { name: 'Santa Rosa de Cabal', departmentName: 'Risaralda' },
+        { name: 'Medellín', departmentName: 'Antioquia' },
+        { name: 'Envigado', departmentName: 'Antioquia' },
+        { name: 'Bello', departmentName: 'Antioquia' },
+        { name: 'Cali', departmentName: 'Valle del Cauca' },
+        { name: 'Palmira', departmentName: 'Valle del Cauca' },
+        { name: 'Bogotá', departmentName: 'Cundinamarca' },
+        { name: 'Zipaquirá', departmentName: 'Cundinamarca' },
+        { name: 'Manizales', departmentName: 'Caldas' },
+        { name: 'Armenia', departmentName: 'Quindío' },
+        { name: 'Barranquilla', departmentName: 'Atlántico' },
+        { name: 'Cartagena', departmentName: 'Bolívar' },
+        { name: 'Bucaramanga', departmentName: 'Santander' },
+        { name: 'Cúcuta', departmentName: 'Norte de Santander' }
+    ];
+
+    for (const city of cities) {
+        const departmentId = departmentMap.get(city.departmentName);
+        if (departmentId) {
+            await prisma.city.create({
+                data: {
+                    name: city.name,
+                    departmentId
+                }
+            });
+        }
+    }
+
+    console.log(`✅ Creadas ${cities.length} ciudades`);
 }
 
 async function createMusicalGenres() {
@@ -151,13 +229,85 @@ async function createReservationStatus() {
     console.log(`✅ Creados ${statuses.length} estados de reserva`);
 }
 
+async function createEvents() {
+    console.log('Creando tipos de eventos...');
+
+    const events = [
+        { name: "Bodas" },
+        { name: "Eventos Corporativos" },
+        { name: "Graduaciones" },
+        { name: "Fiestas Privadas" },
+        { name: "Cumpleaños" },
+        { name: "Aniversarios" },
+        { name: "Conciertos" },
+        { name: "Festivales" }
+    ];
+
+    for (const event of events) {
+        await prisma.event.create({
+            data: event
+        });
+    }
+
+    console.log(`✅ Creados ${events.length} tipos de eventos`);
+}
+
+async function updateMusiciansWithEvents() {
+    console.log('Asignando eventos y precios a músicos...');
+
+    // Obtener todos los músicos y eventos
+    const musicians = await prisma.musician.findMany();
+    const events = await prisma.event.findMany();
+
+    // Para cada músico, asignar algunos eventos aleatorios y precios
+    for (const musician of musicians) {
+        // Asignar precios aleatorios
+        const minPrice = Math.floor(Math.random() * 5 + 1) * 100000; // 100k-500k
+        const maxPrice = minPrice + Math.floor(Math.random() * 5 + 1) * 100000; // minPrice + (100k-500k)
+
+        // Actualizar el músico con los precios
+        await prisma.musician.update({
+            where: { id: musician.id },
+            data: {
+                minPrice,
+                maxPrice
+            }
+        });
+
+        // Seleccionar eventos aleatorios (entre 2 y 5)
+        const numEvents = Math.floor(Math.random() * 4) + 2;
+        const selectedEvents = [...events]
+            .sort(() => 0.5 - Math.random())
+            .slice(0, numEvents);
+
+        // Crear relaciones entre músico y eventos
+        for (const event of selectedEvents) {
+            await prisma.musicianevent.create({
+                data: {
+                    musicianId: musician.id,
+                    eventId: event.id
+                }
+            });
+        }
+    }
+
+    console.log(`✅ Actualizados ${musicians.length} músicos con eventos y precios`);
+}
+
 async function createUsers() {
     console.log('Creando usuarios...');
 
-    // Crear músicos
     // Obtener géneros musicales e instrumentos para asignar a los músicos
     const genres = await prisma.musicalgenre.findMany();
     const instruments = await prisma.instrument.findMany();
+
+    // Obtener ciudades para asignar a los usuarios
+    const cities = await prisma.city.findMany();
+    const pereiraCity = cities.find(city => city.name === 'Pereira')?.id;
+    const medellinCity = cities.find(city => city.name === 'Medellín')?.id;
+    const caliCity = cities.find(city => city.name === 'Cali')?.id;
+    const bogotaCity = cities.find(city => city.name === 'Bogotá')?.id;
+    const manizalesCity = cities.find(city => city.name === 'Manizales')?.id;
 
     // Crear músicos
     const musicians = [
@@ -168,7 +318,9 @@ async function createUsers() {
             email: 'juan@example.com',
             phone: '3201234567',
             genres: [genres[0].id, genres[1].id, genres[12].id],
-            instruments: [instruments[0].id, instruments[4].id]
+            instruments: [instruments[0].id, instruments[4].id],
+            cityId: bogotaCity,
+            address: 'Calle 123 #45-67'
         },
         {
             username: 'musico2',
@@ -177,7 +329,9 @@ async function createUsers() {
             email: 'maria@example.com',
             phone: '3002587413',
             genres: [genres[6].id, genres[7].id, genres[10].id],
-            instruments: [instruments[1].id, instruments[19].id]
+            instruments: [instruments[1].id, instruments[19].id],
+            cityId: medellinCity,
+            address: 'Carrera 78 #23-45'
         },
         {
             username: 'musico3',
@@ -186,7 +340,9 @@ async function createUsers() {
             email: 'david@example.com',
             phone: '3156987412',
             genres: [genres[3].id, genres[4].id],
-            instruments: [instruments[2].id, instruments[9].id]
+            instruments: [instruments[2].id, instruments[9].id],
+            cityId: caliCity,
+            address: 'Avenida 5 Norte #45-12'
         },
         {
             username: 'musico4',
@@ -195,7 +351,9 @@ async function createUsers() {
             email: 'laura@example.com',
             phone: '3109632587',
             genres: [genres[8].id, genres[11].id],
-            instruments: [instruments[5].id, instruments[19].id]
+            instruments: [instruments[5].id, instruments[19].id],
+            cityId: manizalesCity,
+            address: 'Calle 12 #34-56'
         },
         {
             username: 'musico5',
@@ -204,7 +362,9 @@ async function createUsers() {
             email: 'carlosvives@example.com',
             phone: '3152345678',
             genres: [genres[2].id, genres[6].id, genres[7].id, genres[8].id],
-            instruments: [instruments[0].id, instruments[19].id]
+            instruments: [instruments[0].id, instruments[19].id],
+            cityId: pereiraCity,
+            address: 'Carrera 15 #35-24, Dosquebradas'
         }
     ];
 
