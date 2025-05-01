@@ -145,9 +145,14 @@ export default function ReservationsPage() {
     const chatWithParticipant = (participantId: string) => {
         if (!userRole) return;
 
-        // Determinar el parámetro de la URL según el rol
-        const queryParam = userRole === "CLIENT" ? "musicianId" : "clientId";
-        router.push(`/chats?${queryParam}=${participantId}`);
+        if (userRole === "CLIENT") {
+            // Si es cliente, redirigir al perfil del músico con el hash para el chat
+            router.push(`/musicians/${participantId}#chat`);
+        } else {
+            // Si es músico, redirigir al perfil del músico (su propio perfil) con un queryParam para el cliente
+            // De esta manera, el componente de chat en el perfil sabrá qué conversación mostrar
+            router.push(`/profile?clientId=${participantId}#chat`);
+        }
     };
 
     return (

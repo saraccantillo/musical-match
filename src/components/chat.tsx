@@ -179,8 +179,19 @@ export function Chat({
                     const reservationStatus = reservationData.status || '';
                     console.log("Estado de reserva:", reservationStatus);
 
-                    setHasReservation(reservationExists && (reservationStatus !== 'pending' && reservationStatus !== 'Pendiente'));
-                    setIsAccepted(reservationExists && (reservationStatus === 'Aceptada' || reservationStatus === 'Completada'));
+                    // Si hay una reserva y su estado no es pendiente, actualizar la UI
+                    const hasReserv = reservationExists && (reservationStatus !== 'pending' && reservationStatus !== 'Pendiente');
+                    const isAccept = reservationExists && (reservationStatus === 'Aceptada' || reservationStatus === 'Completada');
+
+                    console.log("Actualizando estados - hasReservation:", hasReserv, "isAccepted:", isAccept);
+
+                    if (hasReserv) {
+                        setHasReservation(true);
+                    }
+
+                    if (isAccept) {
+                        setIsAccepted(true);
+                    }
                 }
 
                 const formattedMessages = apiMessages.map((msg: ApiMessage) => {
@@ -200,6 +211,17 @@ export function Chat({
 
                 if (formattedMessages.length > 0) {
                     setMessages(formattedMessages);
+
+                    // Verificar si hay un mensaje de aceptación en los mensajes
+                    // Usamos una función más robusta para detectar mensajes de aceptación
+                    const hasAcceptedMessage = checkForAcceptanceMessage(formattedMessages);
+
+                    if (hasAcceptedMessage) {
+                        console.log("Se encontró un mensaje de aceptación, actualizando isAccepted a true");
+                        setIsAccepted(true);
+                        setHasReservation(true);
+                    }
+
                     setIsPrereservation(true);
                 }
             }
@@ -208,6 +230,20 @@ export function Chat({
         } finally {
             setIsLoading(false);
         }
+    };
+
+    // Función auxiliar para verificar si hay mensajes de aceptación de forma más robusta
+    const checkForAcceptanceMessage = (messages: Message[]): boolean => {
+        return messages.some(msg => {
+            const content = msg.content.toLowerCase();
+            return (
+                content.includes("solicitud aceptada") ||
+                content.includes("*solicitud aceptada*") ||
+                content.includes("✅ *solicitud aceptada*") ||
+                (content.includes("aceptado") && content.includes("reserva")) ||
+                (content.includes("reserva") && content.includes("creada"))
+            );
+        });
     };
 
     // Auto-scroll cuando se añaden nuevos mensajes
@@ -242,8 +278,17 @@ export function Chat({
                             const reservationExists = reservationData.exists;
                             const reservationStatus = reservationData.status || '';
 
-                            setHasReservation(reservationExists && (reservationStatus !== 'pending' && reservationStatus !== 'Pendiente'));
-                            setIsAccepted(reservationExists && (reservationStatus === 'Aceptada' || reservationStatus === 'Completada'));
+                            console.log("Estado actual de reserva durante refresh:", reservationStatus);
+                            console.log("Estado actual de isAccepted:", isAccepted);
+
+                            // Actualizar los estados de UI basados en el estado de la reserva
+                            if (reservationExists && (reservationStatus !== 'pending' && reservationStatus !== 'Pendiente')) {
+                                setHasReservation(true);
+                            }
+
+                            if (reservationExists && (reservationStatus === 'Aceptada' || reservationStatus === 'Completada')) {
+                                setIsAccepted(true);
+                            }
                         }
 
                         const formattedMessages = apiMessages.map((msg: ApiMessage) => {
@@ -261,6 +306,16 @@ export function Chat({
                             };
                         });
 
+                        // Verificar si hay mensajes de aceptación nuevos
+                        if (formattedMessages.length > 0 && !isAccepted) {
+                            const hasAcceptedMessage = checkForAcceptanceMessage(formattedMessages);
+                            if (hasAcceptedMessage) {
+                                console.log("Mensaje de aceptación detectado durante refresh, actualizando isAccepted");
+                                setIsAccepted(true);
+                                setHasReservation(true);
+                            }
+                        }
+
                         // Solo actualizar si hay nuevos mensajes
                         if (formattedMessages.length !== messages.length) {
                             setMessages(formattedMessages);
@@ -272,12 +327,15 @@ export function Chat({
             }
         };
 
+        // Ejecutar inmediatamente
+        refreshMessages();
+
         // Actualizar cada 5 segundos
         const intervalId = setInterval(refreshMessages, 5000);
 
         // Limpiar intervalo al desmontar
         return () => clearInterval(intervalId);
-    }, [userId, messages.length, clientId, musicianId]);
+    }, [userId, messages.length, clientId, musicianId, isAccepted]);
 
     // Enviar mensaje a la API
     const sendMessageToApi = async (content: string, senderIdValue?: string) => {
@@ -348,7 +406,7 @@ export function Chat({
     };
 
     // Determinar si se debe mostrar el botón de aceptar solicitud (solo para músicos y solo en prereservación)
-    const showAcceptButton = userRole === "MUSICIAN" && isPrereservation && messages.length > 0;
+    const showAcceptButton = userRole === "MUSICIAN" && isPrereservation && !isAccepted && messages.length > 0;
 
     // Función para extraer datos de reservación a partir del primer mensaje
     const extractReservationDataFromMessage = (): ReservationData | null => {
@@ -435,8 +493,13 @@ export function Chat({
             try {
                 console.log("Iniciando proceso de aceptación de solicitud...");
 
-                // Enviar un mensaje automático informando que se ha aceptado la solicitud
-                const acceptMessage = `✅ *SOLICITUD ACEPTADA*\n\nHe aceptado tu solicitud de reserva. Puedes revisar los detalles en la sección "Mis Reservas".\nFecha: ${format(new Date(dataToUse.eventDate), "dd/MM/yyyy")}\nPrecio: COP $${dataToUse.initialPrice.toLocaleString()}`;
+                // IMPORTANTE: Forzar la actualización del estado inmediatamente para cambiar la UI
+                // antes de cualquier operación asíncrona
+                setIsAccepted(true);
+                setHasReservation(true);
+
+                // Enviar un mensaje automático informando que se ha aceptado la solicitud y creado la reserva
+                const acceptMessage = `✅ *SOLICITUD ACEPTADA*\n\nHe aceptado tu solicitud de reserva. La reserva ha sido creada correctamente.\nPuedes revisar los detalles en la sección "Mis Reservas".\nFecha: ${format(new Date(dataToUse.eventDate), "dd/MM/yyyy")}\nPrecio: COP $${dataToUse.initialPrice.toLocaleString()}`;
 
                 // Agregar mensaje localmente para UX inmediata
                 const message: Message = {
@@ -460,9 +523,11 @@ export function Chat({
                 const result = await onCreateReservationRequest(clientId, musicianId, dataToUse);
                 console.log("Resultado de creación:", result);
 
-                // Actualizar estado para mostrar mensajes e inhabilitar el chat
-                setIsAccepted(true);
                 console.log("Solicitud aceptada con éxito");
+
+                // Asegurar que los estados estén correctamente actualizados
+                setIsAccepted(true);
+                setHasReservation(true);
 
                 // Refrescar los datos para asegurar que todo está actualizado
                 await loadMessagesByUsers();
@@ -470,6 +535,9 @@ export function Chat({
                 alert("¡Has aceptado la solicitud con éxito! La reserva ha sido creada.");
             } catch (error) {
                 console.error("Error al crear la reservación:", error);
+                // En caso de error, revertir los cambios de estado
+                setIsAccepted(false);
+                setHasReservation(false);
                 alert("Hubo un problema al aceptar la solicitud. Por favor, intenta nuevamente.");
             }
         } else {
@@ -500,6 +568,9 @@ Comentarios adicionales: ${data.comments || "Ninguno"}
     // Determinar quién es el otro usuario en la conversación según el rol
     const otherUserName = userRole === "CLIENT" ? musicianName : clientName;
 
+    // Debug para verificar el valor de isAccepted
+    console.log("Renderizando componente chat, isAccepted:", isAccepted, "isPrereservation:", isPrereservation, "hasReservation:", hasReservation);
+
     return (
         <div className="flex flex-col h-[600px] bg-white border rounded-lg shadow-sm">
             {/* Header */}
@@ -511,7 +582,7 @@ Comentarios adicionales: ${data.comments || "Ninguno"}
                     <p className="text-sm text-gray-500">Conversa con el {userRole === "CLIENT" ? "músico" : "cliente"}</p>
                 )}
 
-                {/* Mostrar indicador de prereservación */}
+                {/* Mostrar indicador de prereservación - SOLO si no está aceptada aún */}
                 {isPrereservation && !isAccepted && (
                     <div className="mt-2 flex justify-between items-center">
                         <span className="text-sm text-yellow-600 font-medium">
@@ -547,8 +618,8 @@ Comentarios adicionales: ${data.comments || "Ninguno"}
                     </div>
                 )}
 
-                {/* Mostrar notificación de chat cerrado si hay una reserva confirmada */}
-                {hasReservation && (
+                {/* Mostrar notificación de chat cerrado si hay una reserva confirmada pero no mostrar cuando ya se está mostrando el mensaje de aceptación */}
+                {hasReservation && !isAccepted && (
                     <div className="mt-2">
                         <span className="text-sm text-blue-600 font-medium">
                             ℹ️ Este chat está asociado a una reserva confirmada. No se pueden enviar más mensajes.

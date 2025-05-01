@@ -55,6 +55,7 @@ export default function MusicianProfilePage() {
     const [isReservationDialogOpen, setIsReservationDialogOpen] = useState(false);
     const [isFavorite, setIsFavorite] = useState(false);
     const [musician, setMusician] = useState<Musician | null>(null);
+    const [activeTab, setActiveTab] = useState<string>("description");
 
     const images = [
         "/images/gallery-1.jpg",
@@ -119,6 +120,19 @@ export default function MusicianProfilePage() {
 
         fetchMusicianData();
     }, [musicianId]);
+
+    // Detectar el hash en la URL y cambiar a la pestaña correspondiente
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            // Verificar si existe el hash #chat en la URL
+            if (window.location.hash === '#chat') {
+                // Solo cambiar a la pestaña de chat si el usuario es cliente
+                if (userRole === 'CLIENT') {
+                    setActiveTab('chat');
+                }
+            }
+        }
+    }, [userRole]);
 
     const nextImage = () => {
         setCurrentImage((prev) => (prev === images.length - 1 ? 0 : prev + 1));
@@ -305,7 +319,7 @@ Comentarios adicionales: ${data.comments || "Ninguno"}
 
                     {/* Contenido principal - tabs */}
                     <div className="w-full lg:w-2/3">
-                        <Tabs defaultValue="description" className="w-full">
+                        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                             <TabsList className="bg-white border border-gray-200">
                                 <TabsTrigger value="description">Descripción</TabsTrigger>
                                 <TabsTrigger value="repertoire">Repertorio</TabsTrigger>

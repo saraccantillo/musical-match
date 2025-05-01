@@ -81,6 +81,27 @@ export default function ProfilePage() {
         };
     }, []);
 
+    // Efecto para detectar el hash en la URL y el parámetro clientId
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            // Verificar si existe el hash #chat en la URL
+            if (window.location.hash === '#chat') {
+                // Solo cambiar a la pestaña de chat si el usuario es músico
+                if (userRole === 'MUSICIAN') {
+                    setActiveTab('chats');
+
+                    // Verificar si hay un parámetro clientId en la URL
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const clientIdParam = urlParams.get('clientId');
+
+                    if (clientIdParam) {
+                        setSelectedClientId(clientIdParam);
+                    }
+                }
+            }
+        }
+    }, [userRole]);
+
     const fetchMusicianData = async (musicianId: string) => {
         try {
             const response = await fetch(`/api/musicians/${musicianId}`);
