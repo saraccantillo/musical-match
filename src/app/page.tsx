@@ -41,7 +41,7 @@ export default function Home() {
         location: "Bogotá, Colombia",
         rating: 4.8,
         reviews: 23,
-        image: "/images/musician1.jpg"
+        image: "/images/profile.jpg"
       },
       {
         id: "2",
@@ -50,7 +50,7 @@ export default function Home() {
         location: "Medellín, Colombia",
         rating: 4.9,
         reviews: 45,
-        image: "/images/musician2.jpg"
+        image: "/images/profile.jpg"
       },
       {
         id: "3",
@@ -59,7 +59,7 @@ export default function Home() {
         location: "Cali, Colombia",
         rating: 4.7,
         reviews: 18,
-        image: "/images/musician3.jpg"
+        image: "/images/profile.jpg"
       },
       {
         id: "4",
@@ -68,7 +68,7 @@ export default function Home() {
         location: "Barranquilla, Colombia",
         rating: 4.6,
         reviews: 32,
-        image: "/images/musician4.jpg"
+        image: "/images/profile.jpg"
       },
       {
         id: "5",

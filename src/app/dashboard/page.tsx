@@ -7,6 +7,7 @@ import { MusicianCard, type Musician } from "@/components/musician-card";
 import { Footer } from "@/components/footer";
 import { useRouter } from "next/navigation";
 
+
 // Categorías populares (esto podría venir de una API también)
 const popularCategories = [
     {
@@ -18,7 +19,7 @@ const popularCategories = [
     {
         id: "2",
         name: "Fiestas",
-        image: "/images/party.jpg",
+        image: "./images/party.jpg",
         description: "Animación para cualquier celebración"
     },
     {

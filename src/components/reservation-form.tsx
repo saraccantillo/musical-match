@@ -27,6 +27,7 @@ interface ReservationFormProps {
     onClose: () => void;
     onSubmit: (data: ReservationData) => void;
     initialPrice?: number;
+    comments: string;
 }
 
 export function ReservationForm({ isOpen, onClose, onSubmit, initialPrice = 300000 }: ReservationFormProps) {
@@ -59,9 +60,28 @@ export function ReservationForm({ isOpen, onClose, onSubmit, initialPrice = 3000
         }));
     };
 
-    const handleSubmit = () => {
-        onSubmit(reservationData);
-        onClose();
+    const handleSubmit = async () => {
+        console.log("Datos de reserva a enviar:", reservationData); // Verifica aquí
+        try {
+            const response = await fetch("/api/reservations", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${localStorage.getItem("authToken")}` // Si necesitas autenticación
+                },
+                body: JSON.stringify(reservationData),
+            });
+
+            if (!response.ok) {
+                throw new Error("Error al crear la reserva");
+            }
+
+            const data = await response.json();
+            console.log("Reserva creada:", data);
+            onClose(); // Cerrar el diálogo después de crear la reserva
+        } catch (error) {
+            console.error("Error al enviar la reserva:", error);
+        }
     };
 
     const eventTypes = [
