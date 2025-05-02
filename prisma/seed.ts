@@ -29,7 +29,6 @@ async function cleanData() {
     console.log('Limpiando datos existentes...');
 
     // El orden es importante para evitar errores de relaciones
-    await prisma.message.deleteMany({});
     await prisma.review.deleteMany({});
     await prisma.completedreservation.deleteMany({});
     await prisma.reservation.deleteMany({});
