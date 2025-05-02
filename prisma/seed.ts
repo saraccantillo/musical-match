@@ -30,6 +30,7 @@ async function cleanData() {
 
     // El orden es importante para evitar errores de relaciones
     await prisma.message.deleteMany({});
+    await prisma.conversation.deleteMany({});
     await prisma.review.deleteMany({});
     await prisma.completedreservation.deleteMany({});
     await prisma.reservation.deleteMany({});
@@ -215,7 +216,7 @@ async function createReservationStatus() {
     const statuses = [
         { name: 'Pendiente' },
         { name: 'Completada' },
-        { name: 'Rechazada' }
+        { name: 'Cancelada' }
     ];
 
     for (const status of statuses) {
