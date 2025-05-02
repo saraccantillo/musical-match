@@ -406,6 +406,7 @@ export default function MusicianProfilePage() {
                     initialPrice={musician.priceRange.replace(/[^0-9]/g, "").length > 0
                         ? parseInt(musician.priceRange.replace(/[^0-9]/g, ""))
                         : 300000}
+                    comments=""
                 />
             )}
         </div>

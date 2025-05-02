@@ -1,5 +1,17 @@
+"use client";
+
 import { Button } from "@/components/ui/button";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useParams } from "next/navigation";
+
+interface UserData {
+    id: string;
+    name: string;
+    username: string;
+    email: string;
+    phone: string;
+    role?: string;
+}
 
 // Tipo para los músicos
 export type Musician = {
@@ -23,9 +35,70 @@ interface MusicianCardProps {
 
 export function MusicianCard({ musician, showDiscount = true }: MusicianCardProps) {
     const router = useRouter();
+    const [userData, setUserData] = useState<UserData | null>(null);
+    const [isFavorite, setIsFavorite] = useState(false);
+
+    useEffect(() => {
+        // Obtener datos del usuario desde el localStorage
+        
+        const storedUser = localStorage.getItem("userData");
+
+        if (storedUser) {
+            try {
+                setUserData(JSON.parse(storedUser));
+            } catch (error) {
+                console.error("Error parsing user data", error);
+            }
+        }
+
+        // Verificar si el músico ya es favorito
+        const favorites = JSON.parse(localStorage.getItem("favorites") || "[]");
+        const isMusicianFavorite = favorites.some((fav: Musician) => fav.id === musician.id);
+        setIsFavorite(isMusicianFavorite);
+    }, [musician.id]);
 
     const handleViewProfile = () => {
         router.push(`/musicians/${musician.id}`);
+    };
+
+    const handleAddToFavorites = async () => {
+        try {
+            const response = await fetch(`/api/favorites`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    clientId: userData?.id, // Reemplaza con el ID del cliente actual
+                    musicianId: musician.id,
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error("Error al añadir a favoritos");
+            }
+
+            const data = await response.json();
+            console.log("Músico añadido a favoritos:", data);
+
+            // Actualizar el estado de favoritos
+            setIsFavorite(true);
+
+            // Guardar en localStorage
+            const favorites = JSON.parse(localStorage.getItem("favorites") || "[]");
+            favorites.push(musician);
+            localStorage.setItem("favorites", JSON.stringify(favorites));
+        } catch (error) {
+            console.error("Error al añadir a favoritos:", error);
+        }
+    };
+
+    const handleRemoveFromFavorites = () => {
+        // Eliminar el músico de favoritos
+        const favorites = JSON.parse(localStorage.getItem("favorites") || "[]");
+        const updatedFavorites = favorites.filter((fav: Musician) => fav.id !== musician.id);
+        localStorage.setItem("favorites", JSON.stringify(updatedFavorites));
+        setIsFavorite(false);
     };
 
     return (
@@ -108,10 +181,14 @@ export function MusicianCard({ musician, showDiscount = true }: MusicianCardProp
                     </Button>
                     <Button
                         variant="outline"
-                        className="px-2 sm:px-3 border-primary hover:bg-primary/10 text-primary"
+                        className={`px-2 sm:px-3 border-primary hover:bg-primary/10 text-primary ${isFavorite ? 'text-red-500 border-red-500' : ''}`}
                         onClick={(e) => {
                             e.stopPropagation();
-                            // Aquí iría la lógica para añadir a favoritos
+                            if (isFavorite) {
+                                handleRemoveFromFavorites();
+                            } else {
+                                handleAddToFavorites();
+                            }
                         }}
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 sm:w-5 sm:h-5">

@@ -38,6 +38,7 @@ model client {
   conversation         conversation[]
   reservation          reservation[]
   review               review[]
+  favorites            favorite[]
 
   @@index([cityId], map: "Client_cityId_fkey")
 }
@@ -115,6 +116,7 @@ model musician {
   musicianevent        musicianevent[]
   reservation          reservation[]
   review               review[]
+  favorites            favorite[] 
 
   @@index([cityId], map: "Musician_cityId_fkey")
 }
@@ -204,4 +206,14 @@ model musicianevent {
 
   @@unique([musicianId, eventId], map: "MusicianEvent_musicianId_eventId_key")
   @@index([eventId], map: "MusicianEvent_eventId_fkey")
+}
+
+model favorite {
+  id         String   @id @default(cuid())
+  clientId   String
+  musicianId String
+  client     client   @relation(fields: [clientId], references: [id], map: "Favorite_clientId_fkey")
+  musician   musician @relation(fields: [musicianId], references: [id], map: "Favorite_musicianId_fkey")
+
+  @@unique([clientId, musicianId], map: "Favorite_clientId_musicianId_key") // Asegura que un cliente no pueda marcar el mismo músico como favorito más de una vez
 }
