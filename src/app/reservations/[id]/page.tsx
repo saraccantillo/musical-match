@@ -4,13 +4,13 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 interface PageProps {
-    params: {
+    params: Promise<{
         id: string;
-    };
+    }>;
 }
 
 export default async function ReservationDetailPage({ params }: PageProps) {
-    const { id } = params;
+    const { id } = await params;
 
     // Obtener datos de la reserva
     const reservation = await prisma.reservation.findUnique({

@@ -40,7 +40,10 @@ async function getRawBody(req: Request): Promise<string> {
 export async function POST(req: Request) {
     try {
         const body = await getRawBody(req);
-        const headersList = headers();
+
+        // En Next.js 15, headers() devuelve una Promise
+        const headersPromise = headers();
+        const headersList = await headersPromise;
         const signature = headersList.get("stripe-signature") as string;
 
         if (!signature) {

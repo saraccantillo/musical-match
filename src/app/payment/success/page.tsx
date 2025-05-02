@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button";
 export default async function SuccessPage({
     searchParams,
 }: {
-    searchParams: { session_id: string; reservation_id: string };
+    searchParams: Promise<{ session_id: string; reservation_id: string }>;
 }) {
-    const { session_id, reservation_id } = searchParams;
+    const { session_id, reservation_id } = await searchParams;
 
     // Verificar si tenemos los parámetros necesarios
     if (!session_id || !reservation_id) {

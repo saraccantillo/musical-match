@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChatHistory } from "@/components/chat-history";
 import { getUserSession } from "@/lib/auth";
 
-export default function ChatsPage() {
+function ChatsContent() {
     const [isLoading, setIsLoading] = useState(true);
     const [userRole, setUserRole] = useState<string | null>(null);
     const router = useRouter();
@@ -63,5 +63,13 @@ export default function ChatsPage() {
                 </Button>
             </div>
         </div>
+    );
+}
+
+export default function ChatsPage() {
+    return (
+        <Suspense fallback={<div className="container mx-auto py-10 text-center">Cargando chats...</div>}>
+            <ChatsContent />
+        </Suspense>
     );
 } 

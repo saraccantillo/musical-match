@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
-export default function CancelPage({
+export default async function CancelPage({
     searchParams,
 }: {
-    searchParams: { reservation_id: string };
+    searchParams: Promise<{ reservation_id: string }>;
 }) {
-    const { reservation_id } = searchParams;
+    const { reservation_id } = await searchParams;
 
     return (
         <div className="container mx-auto max-w-3xl py-16 px-4">
