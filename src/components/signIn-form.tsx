@@ -47,7 +47,7 @@ export function SignInForm({
     const [error, setError] = useState<string | null>(null)
     const [loading, setLoading] = useState<boolean>(false)
     const [showRoleSelector, setShowRoleSelector] = useState<boolean>(false)
-    const [userData, setUserData] = useState<Record<string, unknown>>({})
+    const [, setUserData] = useState<Record<string, unknown>>({})
     const [showRoleModal, setShowRoleModal] = useState(false)
     const userId = ""
 

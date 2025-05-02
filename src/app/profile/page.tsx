@@ -8,8 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { ChatHistory } from "@/components/chat-history";
-import { Badge } from "@/components/ui/badge";
-import { ChevronLeft, ChevronRight, MapPin, DollarSign, Calendar, Star, Music, User, Mail, Phone } from "lucide-react";
+import { ChevronLeft, ChevronRight, Star, Music } from "lucide-react";
 import Image from "next/image";
 import { getUserInitials } from "@/lib/utils";
 import ReservationsTable from "@/components/reservations-table";
@@ -25,12 +24,25 @@ interface UserData {
     city?: string;
 }
 
+// Interfaz para datos de artista
+interface ArtistData {
+    id: string;
+    name: string;
+    description?: string;
+    genre?: string;
+    priceRange?: string;
+    location?: string;
+    repertoire?: string[];
+    reviews?: Array<{ name: string, date: string, rating: number, comment: string }>;
+    // Añade los demás campos según sea necesario
+}
+
 export default function ProfilePage() {
     const [currentImage, setCurrentImage] = useState(0);
     const [userRole, setUserRole] = useState<string | null>(null);
     const [userData, setUserData] = useState<UserData | null>(null);
     const [loading, setLoading] = useState(true);
-    const [artistData, setArtistData] = useState<any>(null);
+    const [artistData, setArtistData] = useState<ArtistData | null>(null);
     const [activeTab, setActiveTab] = useState("description");
     const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
     const router = useRouter();
@@ -134,6 +146,13 @@ export default function ProfilePage() {
         { src: "/images/party.jpg", title: "Fiestas Privadas" },
     ];
 
+    // Función auxiliar para obtener el nombre del rol
+    const getRoleName = (role: string | null): string => {
+        if (role === "MUSICIAN") return "Músico";
+        if (role === "CLIENT") return "Cliente";
+        return "Usuario";
+    };
+
     if (loading) {
         return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
     }
@@ -159,7 +178,9 @@ export default function ProfilePage() {
                                                     </AvatarFallback>
                                                 </Avatar>
                                                 <h2 className="text-xl font-semibold">{userData.name}</h2>
-                                                <p className="text-gray-500 text-sm">{userRole === "MUSICIAN" ? "Músico" : "Cliente"}</p>
+                                                <p className="text-gray-500 text-sm">
+                                                    {getRoleName(userRole)}
+                                                </p>
                                             </div>
 
                                             <Separator className="my-4" />
@@ -278,15 +299,6 @@ export default function ProfilePage() {
         reviews: []
     };
 
-    // Mostrar datos del músico
-    const locationText = artistData?.city
-        ? `${artistData.city.name}, ${artistData.city.department.name}`
-        : artist.location;
-
-    const priceRangeText = artistData?.minPrice && artistData?.maxPrice
-        ? `$${Number(artistData.minPrice).toLocaleString()} - $${Number(artistData.maxPrice).toLocaleString()}`
-        : artist.priceRange;
-
     // Renderizar perfil de músico (caso por defecto)
     return (
         <div className="container mx-auto py-10 px-4 md:px-6">
@@ -307,7 +319,9 @@ export default function ProfilePage() {
                                                 </AvatarFallback>
                                             </Avatar>
                                             <h2 className="text-xl font-semibold">{userData.name}</h2>
-                                            <p className="text-gray-500 text-sm">{userRole === "MUSICIAN" ? "Músico" : "Cliente"}</p>
+                                            <p className="text-gray-500 text-sm">
+                                                {getRoleName(userRole)}
+                                            </p>
                                         </div>
 
                                         <Separator className="my-4" />
@@ -389,14 +403,16 @@ export default function ProfilePage() {
 
                                     <TabsContent value="repertoire" className="mt-4">
                                         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                                            <h2 className="text-xl font-semibold mb-3">Mi repertorio</h2>
+                                            <h2 className="text-xl font-semibold mb-3">Mi Repertorio</h2>
                                             <ul className="space-y-2">
-                                                {artist.repertoire.map((song, index) => (
+                                                {artist.repertoire?.map((song, index) => (
                                                     <li key={index} className="flex items-center">
                                                         <Music size={16} className="mr-2 text-gray-500" />
                                                         <span className="text-gray-700">{song}</span>
                                                     </li>
-                                                ))}
+                                                )) || (
+                                                        <li className="text-gray-500 italic">No hay canciones en el repertorio</li>
+                                                    )}
                                             </ul>
                                         </div>
                                     </TabsContent>
@@ -405,7 +421,7 @@ export default function ProfilePage() {
                                         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
                                             <h2 className="text-xl font-semibold mb-3">Opiniones de clientes</h2>
                                             <div className="space-y-4">
-                                                {artist.reviews.map((review, index) => (
+                                                {artist.reviews?.map((review, index) => (
                                                     <div key={index} className="border-b border-gray-200 pb-4 last:border-0">
                                                         <div className="flex justify-between items-center">
                                                             <h3 className="font-medium">{review.name}</h3>

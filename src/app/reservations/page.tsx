@@ -28,6 +28,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { getUserSession } from "@/lib/auth";
+import { loadStripe } from "@stripe/stripe-js";
+
+// Inicializar Stripe con la clave pública
+const stripePromise = loadStripe(
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ""
+);
 
 interface Reservation {
     id: string;
@@ -57,6 +63,7 @@ export default function ReservationsPage() {
     const [reservations, setReservations] = useState<Reservation[]>([]);
     const [userRole, setUserRole] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
+    const [processingPayment, setProcessingPayment] = useState<string | null>(null);
     const router = useRouter();
 
     useEffect(() => {
@@ -120,12 +127,52 @@ export default function ReservationsPage() {
 
     const handlePayReservation = async (reservationId: string) => {
         try {
-            toast.info("Funcionalidad de pago en desarrollo");
-            // La lógica de pagos se implementará más adelante
-            console.log("Reserva a pagar:", reservationId);
+            setProcessingPayment(reservationId);
+            toast.info("Iniciando proceso de pago...");
+
+            // Crear una sesión de checkout en el servidor
+            const response = await fetch("/api/checkout", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    reservationId,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || "Error al procesar el pago");
+            }
+
+            // Si tenemos una URL de redirección, usar esa
+            if (data.url) {
+                window.location.href = data.url;
+                return;
+            }
+
+            // Si no, usar el sessionId para redirectionar con Stripe.js
+            if (data.sessionId) {
+                const stripe = await stripePromise;
+                if (stripe) {
+                    const { error } = await stripe.redirectToCheckout({
+                        sessionId: data.sessionId,
+                    });
+
+                    if (error) {
+                        throw new Error(error.message || "Error al redirigir a Stripe");
+                    }
+                }
+            }
         } catch (error) {
-            console.error("Error:", error);
-            toast.error("Error al procesar la solicitud");
+            console.error("Error de pago:", error);
+            toast.error(
+                error instanceof Error ? error.message : "Error al procesar el pago"
+            );
+        } finally {
+            setProcessingPayment(null);
         }
     };
 
@@ -137,6 +184,8 @@ export default function ReservationsPage() {
                 return <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300">Completada</Badge>;
             case "Rechazada":
                 return <Badge variant="outline" className="bg-red-100 text-red-800 border-red-300">Rechazada</Badge>;
+            case "Pagada":
+                return <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">Pagada</Badge>;
             default:
                 return <Badge variant="outline">{status}</Badge>;
         }
@@ -186,6 +235,7 @@ export default function ReservationsPage() {
                                         onPay={handlePayReservation}
                                         onChat={chatWithParticipant}
                                         userRole={userRole}
+                                        processingPayment={processingPayment}
                                     />
                                 </TabsContent>
                                 <TabsContent value="pending">
@@ -195,15 +245,17 @@ export default function ReservationsPage() {
                                         onPay={handlePayReservation}
                                         onChat={chatWithParticipant}
                                         userRole={userRole}
+                                        processingPayment={processingPayment}
                                     />
                                 </TabsContent>
                                 <TabsContent value="completed">
                                     <ReservationsTable
-                                        reservations={reservations.filter(r => r.reservationstatus.name === "Completada")}
+                                        reservations={reservations.filter(r => r.reservationstatus.name === "Completada" || r.reservationstatus.name === "Pagada")}
                                         getStatusBadge={getStatusBadge}
                                         onPay={handlePayReservation}
                                         onChat={chatWithParticipant}
                                         userRole={userRole}
+                                        processingPayment={processingPayment}
                                     />
                                 </TabsContent>
                                 <TabsContent value="rejected">
@@ -213,6 +265,7 @@ export default function ReservationsPage() {
                                         onPay={handlePayReservation}
                                         onChat={chatWithParticipant}
                                         userRole={userRole}
+                                        processingPayment={processingPayment}
                                     />
                                 </TabsContent>
                             </>
@@ -230,9 +283,10 @@ interface ReservationsTableProps {
     onPay: (reservationId: string) => void;
     onChat: (participantId: string) => void;
     userRole: string | null;
+    processingPayment: string | null;
 }
 
-function ReservationsTable({ reservations, getStatusBadge, onPay, onChat, userRole }: ReservationsTableProps) {
+function ReservationsTable({ reservations, getStatusBadge, onPay, onChat, userRole, processingPayment }: ReservationsTableProps) {
     const handleReject = (reservationId: string) => {
         console.log("Rechazar reserva:", reservationId);
         // La lógica de rechazo se implementará más adelante
@@ -281,8 +335,9 @@ function ReservationsTable({ reservations, getStatusBadge, onPay, onChat, userRo
                                     <Button
                                         size="sm"
                                         onClick={() => onPay(reservation.id)}
+                                        disabled={processingPayment === reservation.id}
                                     >
-                                        Pagar
+                                        {processingPayment === reservation.id ? "Procesando..." : "Pagar"}
                                     </Button>
 
                                     <Button
@@ -290,6 +345,7 @@ function ReservationsTable({ reservations, getStatusBadge, onPay, onChat, userRo
                                         size="sm"
                                         className="text-red-600 border-red-600 hover:bg-red-50"
                                         onClick={() => handleReject(reservation.id)}
+                                        disabled={processingPayment === reservation.id}
                                     >
                                         Rechazar
                                     </Button>

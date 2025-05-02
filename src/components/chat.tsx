@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Send, ThumbsUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -86,73 +86,59 @@ export function Chat({
         setIsPrereservation(!!reservationData);
     }, [reservationData]);
 
-    // Efecto para cargar mensajes desde la API o crear mensaje inicial para prereservación
-    useEffect(() => {
-        const fetchMessages = async () => {
-            if (!userId) return;
+    // Función para verificar mensajes de aceptación
+    const checkForAcceptanceMessage = useCallback((messages: Message[]): boolean => {
+        return messages.some(msg => {
+            const content = msg.content.toLowerCase();
+            return (
+                content.includes("solicitud aceptada") ||
+                content.includes("*solicitud aceptada*") ||
+                content.includes("✅ *solicitud aceptada*") ||
+                (content.includes("aceptado") && content.includes("reserva")) ||
+                (content.includes("reserva") && content.includes("creada"))
+            );
+        });
+    }, []);
 
-            // Si hay datos de prereservación y es la primera vez (cliente)
-            if (reservationData && !initialMessageSent && userRole === "CLIENT") {
-                console.log("Verificando si ya existen mensajes entre cliente y músico");
+    // Enviar mensaje a la API con useCallback
+    const sendMessageToApi = useCallback(async (content: string, senderIdValue?: string) => {
+        if (!content.trim() || !userRole) return false;
 
-                // Primero verificar si ya hay mensajes
-                try {
-                    const checkResponse = await fetch(`/api/conversations?clientId=${clientId}&musicianId=${musicianId}`);
-                    if (checkResponse.ok) {
-                        const checkData = await checkResponse.json();
+        try {
+            const payload = {
+                clientId,
+                musicianId,
+                content,
+                senderId: senderIdValue || (userRole === "CLIENT" ? clientId : musicianId),
+                senderType: userRole
+            };
 
-                        // Si ya hay mensajes, no crear uno nuevo
-                        if (checkData.success && checkData.data.messages && checkData.data.messages.length > 0) {
-                            console.log("Ya existen mensajes, no se creará uno inicial");
-                            loadMessagesByUsers();
-                            setInitialMessageSent(true);
-                            return;
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error al verificar mensajes existentes:', error);
-                }
+            console.log('Enviando mensaje a la API:', payload);
 
-                // Si llegamos aquí, significa que no hay mensajes y debemos crear uno
-                console.log("Creando mensaje inicial de reserva");
-                const initialMessage: Message = {
-                    id: Date.now().toString(),
-                    senderId: clientId,
-                    receiverId: musicianId,
-                    content: createReservationMessage(reservationData),
-                    timestamp: new Date(),
-                    senderName: clientName,
-                    senderType: "client"
-                };
+            const response = await fetch('/api/conversations', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload),
+            });
 
-                setMessages([initialMessage]);
-
-                // Intentar guardar el mensaje en el servidor
-                try {
-                    const success = await sendMessageToApi(initialMessage.content, clientId);
-                    if (success) {
-                        console.log("Mensaje inicial guardado en el servidor");
-                        setInitialMessageSent(true);
-                    } else {
-                        console.error("No se pudo guardar el mensaje inicial");
-                    }
-                } catch (error) {
-                    console.error("Error al guardar mensaje inicial:", error);
-                }
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: "Error desconocido" }));
+                console.error('Error al enviar mensaje:', errorData);
+                throw new Error(errorData.message || 'Error al enviar mensaje');
             }
-            // Cualquier otro caso, cargamos mensajes por usuarios
-            else if (clientId && musicianId) {
-                loadMessagesByUsers();
-            }
-        };
 
-        if (userId && ((reservationData && userRole === "CLIENT") || (clientId && musicianId))) {
-            fetchMessages();
+            const result = await response.json();
+            return result.success;
+        } catch (error) {
+            console.error('Error en sendMessageToApi:', error);
+            return false;
         }
-    }, [userId, userRole, clientId, musicianId, reservationData, initialMessageSent]);
+    }, [clientId, musicianId, userRole]);
 
-    // Cargar mensajes por usuarios
-    const loadMessagesByUsers = async () => {
+    // Cargar mensajes por usuarios con useCallback
+    const loadMessagesByUsers = useCallback(async () => {
         if (!clientId || !musicianId || !userId) return;
 
         setIsLoading(true);
@@ -230,21 +216,37 @@ export function Chat({
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [clientId, musicianId, userId, checkForAcceptanceMessage]);
 
-    // Función auxiliar para verificar si hay mensajes de aceptación de forma más robusta
-    const checkForAcceptanceMessage = (messages: Message[]): boolean => {
-        return messages.some(msg => {
-            const content = msg.content.toLowerCase();
-            return (
-                content.includes("solicitud aceptada") ||
-                content.includes("*solicitud aceptada*") ||
-                content.includes("✅ *solicitud aceptada*") ||
-                (content.includes("aceptado") && content.includes("reserva")) ||
-                (content.includes("reserva") && content.includes("creada"))
-            );
-        });
-    };
+    // Efecto para cargar mensajes desde la API o crear mensaje inicial para prereservación
+    useEffect(() => {
+        const fetchMessages = async () => {
+            // Si tenemos datos de reservación y el usuario es cliente, enviar mensaje de solicitud
+            if (reservationData && userRole === "CLIENT" && userId && !initialMessageSent) {
+                setInitialMessageSent(true);
+
+                try {
+                    // Crear mensaje de solicitud de reserva
+                    const reservationMessage = createReservationMessage(reservationData);
+                    // Enviar mensaje de solicitud
+                    await sendMessageToApi(reservationMessage);
+
+                    // Cargar la conversación después de enviar mensaje
+                    await loadMessagesByUsers();
+                } catch (error) {
+                    console.error("Error al guardar mensaje inicial:", error);
+                }
+            }
+            // Cualquier otro caso, cargamos mensajes por usuarios
+            else if (clientId && musicianId) {
+                loadMessagesByUsers();
+            }
+        };
+
+        if (userId && ((reservationData && userRole === "CLIENT") || (clientId && musicianId))) {
+            fetchMessages();
+        }
+    }, [userId, userRole, clientId, musicianId, reservationData, initialMessageSent, loadMessagesByUsers, sendMessageToApi]);
 
     // Auto-scroll cuando se añaden nuevos mensajes
     useEffect(() => {
@@ -335,44 +337,7 @@ export function Chat({
 
         // Limpiar intervalo al desmontar
         return () => clearInterval(intervalId);
-    }, [userId, messages.length, clientId, musicianId, isAccepted]);
-
-    // Enviar mensaje a la API
-    const sendMessageToApi = async (content: string, senderIdValue?: string) => {
-        if (!content.trim() || !userRole) return false;
-
-        try {
-            const payload = {
-                clientId,
-                musicianId,
-                content,
-                senderId: senderIdValue || (userRole === "CLIENT" ? clientId : musicianId),
-                senderType: userRole
-            };
-
-            console.log('Enviando mensaje a la API:', payload);
-
-            const response = await fetch('/api/conversations', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(payload),
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ message: "Error desconocido" }));
-                console.error('Error al enviar mensaje:', errorData);
-                throw new Error(errorData.message || 'Error al enviar mensaje');
-            }
-
-            const result = await response.json();
-            return result.success;
-        } catch (error) {
-            console.error('Error en sendMessageToApi:', error);
-            return false;
-        }
-    };
+    }, [userId, messages.length, clientId, musicianId, isAccepted, checkForAcceptanceMessage]);
 
     const handleSendMessage = async () => {
         if (!newMessage.trim() || !userRole) return;
@@ -728,4 +693,4 @@ Comentarios adicionales: ${data.comments || "Ninguno"}
             )}
         </div>
     );
-} 
+}

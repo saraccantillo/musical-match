@@ -63,13 +63,13 @@ interface Message {
 interface ChatHistoryProps {
     showOnlyChats: boolean;
     showChatsHeader?: boolean;
-    initialMusicianId?: string | null;
     specificMusicianId?: string;
+    initialMusicianId?: string | null;
     specificClientId?: string | null;
     useTableLayout?: boolean;
 }
 
-export function ChatHistory({ showOnlyChats, showChatsHeader = true, initialMusicianId = null, specificMusicianId, specificClientId = null, useTableLayout = false }: ChatHistoryProps) {
+export function ChatHistory({ showOnlyChats, showChatsHeader = true, specificMusicianId, initialMusicianId = null, specificClientId = null, useTableLayout = false }: ChatHistoryProps) {
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [reservations, setReservations] = useState<Reservation[]>([]);
     const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
@@ -81,66 +81,7 @@ export function ChatHistory({ showOnlyChats, showChatsHeader = true, initialMusi
     const [activeFilter, setActiveFilter] = useState<string>("all");
     const [processedClientId, setProcessedClientId] = useState<string | null>(null);
 
-    useEffect(() => {
-        // Obtener el rol del usuario desde localStorage
-        const storedRole = localStorage.getItem("userRole");
-        const storedUser = localStorage.getItem("userData");
-
-        if (storedRole) {
-            setUserRole(storedRole as "CLIENT" | "MUSICIAN" | null);
-        }
-
-        if (storedUser) {
-            try {
-                const userData = JSON.parse(storedUser);
-                setUserId(userData.id);
-            } catch (error) {
-                console.error("Error parsing user data", error);
-            }
-        }
-    }, []);
-
-    // Detectar cambios en los filtros de pestañas cuando estamos en modo tabla
-    useEffect(() => {
-        if (useTableLayout) {
-            const handleTabChange = (event: Event) => {
-                const customEvent = event as CustomEvent;
-                if (customEvent.detail && customEvent.detail.tab) {
-                    setActiveFilter(customEvent.detail.tab);
-                }
-            };
-
-            document.addEventListener('tabChange', handleTabChange);
-            return () => {
-                document.removeEventListener('tabChange', handleTabChange);
-            };
-        }
-    }, [useTableLayout]);
-
-    // Carga inicial de datos
-    useEffect(() => {
-        async function loadData() {
-            if (!userRole || !userId) return;
-
-            try {
-                setLoading(true);
-                // Cargar conversaciones (chats)
-                await loadConversations();
-
-                // Si necesitamos mostrar reservaciones también
-                if (!showOnlyChats) {
-                    await loadReservations();
-                }
-            } catch (error) {
-                console.error("Error al cargar datos:", error);
-            } finally {
-                setLoading(false);
-            }
-        }
-
-        loadData();
-    }, [userRole, userId, showOnlyChats]);
-
+    // Definir primero la función loadFullConversation
     // Cargar conversación completa para el chat seleccionado
     const loadFullConversation = useCallback(async (clientId: string, musicianId: string) => {
         if (!clientId || !musicianId) return null;
@@ -189,6 +130,183 @@ export function ChatHistory({ showOnlyChats, showChatsHeader = true, initialMusi
             setSelectedConversation(conversation);
         }
     }, [loadFullConversation]);
+
+    // Definir loadConversations con useCallback
+    const loadConversations = useCallback(async () => {
+        if (!userRole || !userId) return;
+
+        // Definir los parámetros de la consulta según el rol y el ID específico
+        let apiUrl = '/api/conversations/list';
+        const queryParams = [];
+
+        if (userRole === 'CLIENT') {
+            queryParams.push(`clientId=${userId}`);
+        } else if (userRole === 'MUSICIAN') {
+            queryParams.push(`musicianId=${userId}`);
+        }
+
+        // Añadir filtros adicionales si se especifican
+        if (specificClientId && userRole === 'MUSICIAN') {
+            queryParams.push(`specificClientId=${specificClientId}`);
+        }
+
+        if (specificMusicianId && userRole === 'CLIENT') {
+            queryParams.push(`specificMusicianId=${specificMusicianId}`);
+        }
+
+        // Construir la URL completa
+        if (queryParams.length > 0) {
+            apiUrl += `?${queryParams.join('&')}`;
+        }
+
+        try {
+            const response = await fetch(apiUrl);
+
+            if (!response.ok) {
+                throw new Error('Error al cargar conversaciones');
+            }
+
+            const data = await response.json();
+
+            if (data.success) {
+                // Ordenar las conversaciones por fecha de actualización (más reciente primero)
+                const sortedConversations = data.data.sort((a: Conversation, b: Conversation) => {
+                    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+                });
+
+                setConversations(sortedConversations);
+
+                // Si hay un cliente específico, seleccionar su conversación
+                if (specificClientId && sortedConversations.length > 0) {
+                    const targetConversation = sortedConversations.find(
+                        (conv: Conversation) => conv.clientId === specificClientId
+                    );
+
+                    if (targetConversation) {
+                        setProcessedClientId(specificClientId);
+                        handleSelectConversation(targetConversation);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error("Error al cargar lista de conversaciones:", error);
+        }
+    }, [userRole, userId, specificClientId, specificMusicianId, handleSelectConversation]);
+
+    // Definir loadReservations con useCallback
+    const loadReservations = useCallback(async () => {
+        if (!userRole || !userId) return;
+
+        try {
+            const apiUrl = userRole === 'CLIENT'
+                ? `/api/reservations?clientId=${userId}`
+                : `/api/reservations?musicianId=${userId}`;
+
+            const response = await fetch(apiUrl);
+
+            if (!response.ok) {
+                throw new Error('Error al cargar reservaciones');
+            }
+
+            const data = await response.json();
+
+            if (data.success) {
+                // Ordenar las reservaciones por fecha de creación (más reciente primero)
+                const sortedReservations = data.data.sort((a: Reservation, b: Reservation) => {
+                    return new Date(b.creationDate).getTime() - new Date(a.creationDate).getTime();
+                });
+
+                setReservations(sortedReservations);
+            }
+        } catch (error) {
+            console.error("Error al cargar lista de reservaciones:", error);
+        }
+    }, [userRole, userId]);
+
+    useEffect(() => {
+        // Obtener el rol del usuario desde localStorage
+        const storedRole = localStorage.getItem("userRole");
+        const storedUser = localStorage.getItem("userData");
+
+        if (storedRole) {
+            setUserRole(storedRole as "CLIENT" | "MUSICIAN" | null);
+        }
+
+        if (storedUser) {
+            try {
+                const userData = JSON.parse(storedUser);
+                setUserId(userData.id);
+            } catch (error) {
+                console.error("Error parsing user data", error);
+            }
+        }
+    }, []);
+
+    // Detectar cambios en los filtros de pestañas cuando estamos en modo tabla
+    useEffect(() => {
+        if (useTableLayout) {
+            const handleTabChange = (event: Event) => {
+                const customEvent = event as CustomEvent;
+                if (customEvent.detail && customEvent.detail.tab) {
+                    setActiveFilter(customEvent.detail.tab);
+                }
+            };
+
+            document.addEventListener('tabChange', handleTabChange);
+            return () => {
+                document.removeEventListener('tabChange', handleTabChange);
+            };
+        }
+    }, [useTableLayout]);
+
+    // Carga inicial de datos
+    useEffect(() => {
+        async function loadData() {
+            if (userRole && userId) {
+                setLoading(true);
+
+                // Si estamos en vista de chats o en layout de tabla, cargar conversaciones
+                if (view === 'chats' || useTableLayout) {
+                    await loadConversations();
+                }
+
+                // Si no estamos en modo "solo chats" o en layout de tabla, cargar reservaciones
+                if ((!showOnlyChats || useTableLayout) && view === 'reservations') {
+                    await loadReservations();
+                }
+
+                setLoading(false);
+            }
+        }
+
+        loadData();
+    }, [userRole, userId, view, loadConversations, loadReservations, showOnlyChats, useTableLayout]);
+
+    // Usar initialMusicianId cuando está disponible
+    useEffect(() => {
+        if (initialMusicianId && userRole === 'CLIENT' && userId) {
+            // Establecer specificMusicianId usando initialMusicianId
+            const musicianId = initialMusicianId;
+            if (musicianId) {
+                // Cargar conversaciones con este músico específico
+                loadConversations();
+            }
+        }
+    }, [initialMusicianId, userRole, userId, loadConversations]);
+
+    // Si cambia specificClientId, cargar nueva conversación
+    useEffect(() => {
+        if (specificClientId && userRole === 'MUSICIAN' && conversations.length > 0 && specificClientId !== processedClientId) {
+            const matchingConversation = conversations.find(
+                conv => conv.clientId === specificClientId
+            );
+
+            if (matchingConversation) {
+                setProcessedClientId(specificClientId);
+                handleSelectConversation(matchingConversation);
+            }
+        }
+    }, [specificClientId, conversations, userRole, handleSelectConversation, processedClientId]);
 
     // Manejar la creación de una nueva reservación basada en datos de chat
     const handleCreateReservation = async (clientId: string, musicianId: string, reservationData: ReservationData) => {
@@ -272,89 +390,6 @@ export function ChatHistory({ showOnlyChats, showChatsHeader = true, initialMusi
         }
     };
 
-    // Cargar conversaciones
-    const loadConversations = async () => {
-        try {
-            // Lógica para cargar las conversaciones según el rol del usuario
-            let endpoint = userRole === "CLIENT"
-                ? `/api/conversations?clientId=${userId}`
-                : `/api/conversations?musicianId=${userId}`;
-
-            // Si hay un ID de músico específico y el usuario es un cliente, filtrar por ese músico
-            if (specificMusicianId && userRole === "CLIENT") {
-                endpoint = `/api/conversations?clientId=${userId}&musicianId=${specificMusicianId}`;
-            }
-            // Si hay un musicianId inicial y el usuario es un cliente, filtrar solo esa conversación
-            else if (initialMusicianId && userRole === "CLIENT") {
-                endpoint = `/api/conversations?clientId=${userId}&musicianId=${initialMusicianId}`;
-            }
-
-            const response = await fetch(endpoint);
-
-            if (!response.ok) {
-                throw new Error('Error al cargar conversaciones');
-            }
-
-            const data = await response.json();
-
-            // Si es una conversación específica, formatearla como un array
-            if ((specificMusicianId || initialMusicianId) && userRole === "CLIENT" && data.success && data.data) {
-                // Si la respuesta es una conversación específica (tiene messages), formatearla
-                if (data.data.messages) {
-                    const musicianId = specificMusicianId || initialMusicianId;
-                    setConversations([{
-                        id: crypto.randomUUID(), // Generar un ID temporal
-                        clientId: userId as string,
-                        musicianId: musicianId as string,
-                        clientName: data.data.clientName,
-                        musicianName: data.data.musicianName,
-                        messages: data.data.messages,
-                        updatedAt: new Date().toISOString()
-                    }]);
-                    // También seleccionar automáticamente esta conversación
-                    setSelectedConversation({
-                        id: crypto.randomUUID(),
-                        clientId: userId as string,
-                        musicianId: musicianId as string,
-                        clientName: data.data.clientName,
-                        musicianName: data.data.musicianName,
-                        messages: data.data.messages,
-                        updatedAt: new Date().toISOString()
-                    });
-                } else {
-                    setConversations(data.data || []);
-                }
-            } else {
-                setConversations(data.data || []);
-            }
-        } catch (error) {
-            console.error("Error al cargar conversaciones:", error);
-            throw error;
-        }
-    };
-
-    // Cargar reservaciones
-    const loadReservations = async () => {
-        try {
-            // Lógica para cargar las reservaciones según el rol
-            const endpoint = userRole === "CLIENT"
-                ? `/api/reservations?clientId=${userId}`
-                : `/api/reservations?musicianId=${userId}`;
-
-            const response = await fetch(endpoint);
-
-            if (!response.ok) {
-                throw new Error('Error al cargar reservaciones');
-            }
-
-            const data = await response.json();
-            setReservations(data.data || []);
-        } catch (error) {
-            console.error("Error al cargar reservaciones:", error);
-            throw error;
-        }
-    };
-
     // Función para mapear ID de estados de la API a los valores locales
     const mapApiStatusToLocalStatus = (statusId: string): string => {
         // En la base de datos probablemente los IDs son numéricos o tienen otro formato
@@ -404,27 +439,6 @@ export function ChatHistory({ showOnlyChats, showChatsHeader = true, initialMusi
             return reservationStatus === activeFilter;
         });
     };
-
-    // Efecto para seleccionar una conversación específica cuando cambia specificClientId
-    useEffect(() => {
-        // Solo intentar seleccionar si hay un ID de cliente específico, hay conversaciones, y no es el mismo que ya se procesó
-        if (specificClientId &&
-            userRole === "MUSICIAN" &&
-            conversations.length > 0 &&
-            specificClientId !== processedClientId) {
-
-            const matchingConversation = conversations.find(
-                conv => conv.clientId === specificClientId
-            );
-
-            if (matchingConversation) {
-                // Marcar este clientId como procesado para evitar ciclos
-                setProcessedClientId(specificClientId);
-                // Seleccionar la conversación
-                handleSelectConversation(matchingConversation);
-            }
-        }
-    }, [specificClientId, conversations, userRole, handleSelectConversation, processedClientId]);
 
     // Vista de Chats
     return (

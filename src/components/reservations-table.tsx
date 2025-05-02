@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +47,30 @@ export default function ReservationsTable({ onChatSelect }: ReservationsTablePro
     const [userId, setUserId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [activeFilter, setActiveFilter] = useState<string>("all");
+
+    // Definir loadReservations con useCallback
+    const loadReservations = useCallback(async () => {
+        if (!userRole || !userId) return;
+
+        try {
+            // Lógica para cargar las reservaciones según el rol
+            const endpoint = userRole === "CLIENT"
+                ? `/api/reservations?clientId=${userId}`
+                : `/api/reservations?musicianId=${userId}`;
+
+            const response = await fetch(endpoint);
+
+            if (!response.ok) {
+                throw new Error('Error al cargar reservaciones');
+            }
+
+            const data = await response.json();
+            setReservations(data.data || []);
+        } catch (error) {
+            console.error("Error al cargar reservaciones:", error);
+            throw error;
+        }
+    }, [userRole, userId]);
 
     useEffect(() => {
         // Obtener el rol del usuario desde localStorage
@@ -98,29 +122,7 @@ export default function ReservationsTable({ onChatSelect }: ReservationsTablePro
         }
 
         loadData();
-    }, [userRole, userId]);
-
-    // Cargar reservaciones
-    const loadReservations = async () => {
-        try {
-            // Lógica para cargar las reservaciones según el rol
-            const endpoint = userRole === "CLIENT"
-                ? `/api/reservations?clientId=${userId}`
-                : `/api/reservations?musicianId=${userId}`;
-
-            const response = await fetch(endpoint);
-
-            if (!response.ok) {
-                throw new Error('Error al cargar reservaciones');
-            }
-
-            const data = await response.json();
-            setReservations(data.data || []);
-        } catch (error) {
-            console.error("Error al cargar reservaciones:", error);
-            throw error;
-        }
-    };
+    }, [userRole, userId, loadReservations]);
 
     // Función para aplicar el estilo de badge según el estado
     const getStatusBadge = (status: string) => {
