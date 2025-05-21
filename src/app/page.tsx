@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Star, Clock, MapPin } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -41,7 +40,7 @@ export default function Home() {
         location: "Bogotá, Colombia",
         rating: 4.8,
         reviews: 23,
-        image: "/images/profile.jpg"
+        image: "/images/jPerez.jpg"
       },
       {
         id: "2",
@@ -50,7 +49,7 @@ export default function Home() {
         location: "Medellín, Colombia",
         rating: 4.9,
         reviews: 45,
-        image: "/images/profile.jpg"
+        image: "/images/mLopez.jpg"
       },
       {
         id: "3",
@@ -59,26 +58,9 @@ export default function Home() {
         location: "Cali, Colombia",
         rating: 4.7,
         reviews: 18,
-        image: "/images/profile.jpg"
-      },
-      {
-        id: "4",
-        name: "Laura Jiménez",
-        genres: ["Bolero", "Vallenato"],
-        location: "Barranquilla, Colombia",
-        rating: 4.6,
-        reviews: 32,
-        image: "/images/profile.jpg"
-      },
-      {
-        id: "5",
-        name: "Carlos Vives",
-        genres: ["Jazz", "Salsa", "Cumbia", "Bolero"],
-        location: "Pereira, Colombia",
-        rating: 4.8,
-        reviews: 56,
-        image: "/images/profile.jpg"
+        image: "/images/dSanchez.jpg"
       }
+  
     ]);
 
     setLoading(false);
@@ -109,25 +91,6 @@ export default function Home() {
             Conecta con talento musical profesional para bodas, eventos
             corporativos y más.
           </p>
-          {!userRole && (
-            <div className="flex flex-col sm:flex-row justify-center gap-4">
-              <Button
-                onClick={handleAuth}
-                className="bg-white text-black hover:bg-gray-200"
-                size="lg"
-              >
-                Registrarme
-              </Button>
-              <Button
-                onClick={handleAuth}
-                variant="outline"
-                className="border-white text-white hover:bg-white/20"
-                size="lg"
-              >
-                Iniciar Sesión
-              </Button>
-            </div>
-          )}
         </div>
       </section>
 
@@ -186,17 +149,6 @@ export default function Home() {
             ))
           )}
         </div>
-
-        {userRole === "CLIENT" && (
-          <div className="text-center mt-12">
-            <Button
-              className="bg-black hover:bg-gray-800 text-white"
-              onClick={() => router.push("/search")}
-            >
-              Ver todos los músicos
-            </Button>
-          </div>
-        )}
       </section>
 
       {/* Features Section */}

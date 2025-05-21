@@ -13,7 +13,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 
 // Definición de los tipos de usuario
 type UserRole = "CLIENT" | "MUSICIAN" | "ADMIN" | null;
@@ -24,6 +24,7 @@ interface NavbarProps {
 }
 
 export function Navbar({ searchTerm = "", onSearchChange }: NavbarProps) {
+    const pathname = usePathname();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -124,8 +125,8 @@ export function Navbar({ searchTerm = "", onSearchChange }: NavbarProps) {
 
                 {/* Panel móvil desplegable */}
                 <div className={`md:hidden py-4 space-y-4 ${isMenuOpen ? 'block' : 'hidden'}`}>
-                    {/* Barra de búsqueda en móvil - solo para clientes */}
-                    {(userRole === "CLIENT" || !isAuthenticated) && (
+                    {/* Barra de búsqueda en móvil - solo para clientes y no en la página de inicio */}
+                    {(userRole === "CLIENT" || !isAuthenticated) && pathname !== '/' && (
                         <div className="w-full">
                             <div className="relative">
                                 <Input
@@ -189,8 +190,8 @@ export function Navbar({ searchTerm = "", onSearchChange }: NavbarProps) {
                         </Link>
                     </div>
 
-                    {/* Barra de búsqueda central que ocupa la mayor parte del espacio - solo para clientes */}
-                    {(userRole === "CLIENT" || !isAuthenticated) && (
+                    {/* Barra de búsqueda central que ocupa la mayor parte del espacio - solo para clientes y no en la página de inicio */}
+                    {(userRole === "CLIENT" || !isAuthenticated) && pathname !== '/' && (
                         <div className="flex-1 max-w-3xl mx-4">
                             <div className="relative">
                                 <Input
